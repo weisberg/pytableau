@@ -15,42 +15,19 @@ from pytableau.exceptions import (
     InvalidWorkbookError,
     SchemaValidationError,
 )
+from pytableau.inspect.catalog import WorkbookCatalog
 from pytableau.package.manager import PackageManager
 from pytableau.xml.engine import XMLSchemaEngine
+
+from .dashboard import Dashboard, DashboardCollection
+from .datasource import Datasource, DatasourceCollection
+from .worksheet import Worksheet, WorksheetCollection
 
 if TYPE_CHECKING:
     from pytableau.exceptions import ValidationIssue
 
 
 _SOURCE_BUILD_TO_VERSION = {v: k for k, v in TABLEAU_VERSION_MAP.items()}
-
-
-class _XMLCollection:
-    """Small helper for workbook-level collections like datasources/worksheets."""
-
-    def __init__(self, nodes: list[etree._Element]) -> None:
-        self._nodes = nodes
-
-    @property
-    def names(self) -> list[str]:
-        return [node.get("name", "") for node in self._nodes if node.get("name")]
-
-    def __iter__(self):
-        return iter(self._nodes)
-
-    def __len__(self) -> int:
-        return len(self._nodes)
-
-    def __getitem__(self, key: int | str) -> etree._Element:
-        if isinstance(key, int):
-            return self._nodes[key]
-        if not isinstance(key, str):
-            raise TypeError("collection keys must be int index or element name")
-
-        for node in self._nodes:
-            if node.get("name") == key:
-                return node
-        raise KeyError(key)
 
 
 def _normalize_version(source_build: str | None) -> str:
@@ -66,8 +43,7 @@ def _normalize_version(source_build: str | None) -> str:
 def _collect_top_level(parent: etree._Element, tag: str) -> list[etree._Element]:
     container = parent.find(f"{tag}s")
     if container is not None:
-        return list(container.findall(tag))
-
+        return [node for node in container if node.tag == tag]
     return list(parent.findall(tag))
 
 
@@ -80,10 +56,10 @@ class Workbook:
         self._tree: etree._ElementTree
         self._version = DEFAULT_TABLEAU_VERSION
         self.source_platform: str | None = None
-        self.datasources = _XMLCollection([])
-        self.worksheets = _XMLCollection([])
-        self.dashboards = _XMLCollection([])
-        self._node_map: dict[str, etree._Element] = {}
+        self.datasources: DatasourceCollection = DatasourceCollection([])
+        self.worksheets: WorksheetCollection = WorksheetCollection([])
+        self.dashboards: DashboardCollection = DashboardCollection([])
+        self.parameters: Datasource | None = None
 
     @property
     def version(self) -> str:
@@ -140,7 +116,8 @@ class Workbook:
     def new(cls, version: str = DEFAULT_TABLEAU_VERSION) -> "Workbook":
         """Create a new, empty workbook."""
         source_build = TABLEAU_VERSION_MAP.get(
-            version, TABLEAU_VERSION_MAP[DEFAULT_TABLEAU_VERSION]
+            version,
+            TABLEAU_VERSION_MAP[DEFAULT_TABLEAU_VERSION],
         )
         root = etree.Element(
             "workbook",
@@ -155,7 +132,6 @@ class Workbook:
         tree = etree.ElementTree(root)
 
         wb = cls()
-        wb._version = version
         wb._load_tree(tree)
         return wb
 
@@ -164,6 +140,10 @@ class Workbook:
         """Construct a workbook from a built-in or custom template."""
         raise NotImplementedError("Workbook.from_template() is implemented in Phase 4")
 
+    def catalog(self) -> WorkbookCatalog:
+        """Collect metadata and field references for read-only inspection."""
+        return WorkbookCatalog(self)
+
     def _load_tree(self, tree: etree._ElementTree) -> None:
         self._tree = tree
         root = tree.getroot()
@@ -171,13 +151,26 @@ class Workbook:
         self._version = _normalize_version(source_build)
         self.source_platform = root.get("source-platform")
 
-        self.datasources = _XMLCollection(_collect_top_level(root, "datasource"))
-        self.worksheets = _XMLCollection(_collect_top_level(root, "worksheet"))
-        self.dashboards = _XMLCollection(_collect_top_level(root, "dashboard"))
-        self._node_map = {
-            node.get("name", f"{node.tag}:{i}"): node for i, node in enumerate(root.iter())
-            if node.get("name")
-        }
+        datasources: list[Datasource] = []
+        parameters: Datasource | None = None
+        for node in _collect_top_level(root, "datasource"):
+            ds = Datasource(node, workbook=self)
+            if ds.is_parameters:
+                parameters = ds
+                continue
+            datasources.append(ds)
+        self.parameters = parameters
+        self.datasources = DatasourceCollection(datasources)
+
+        worksheets: list[Worksheet] = []
+        for node in _collect_top_level(root, "worksheet"):
+            worksheets.append(Worksheet(node, workbook=self))
+        self.worksheets = WorksheetCollection(worksheets)
+
+        dashboards: list[Dashboard] = []
+        for node in _collect_top_level(root, "dashboard"):
+            dashboards.append(Dashboard(node, workbook=self))
+        self.dashboards = DashboardCollection(dashboards)
 
     def _validate_for_save(self) -> list["ValidationIssue"]:
         engine = XMLSchemaEngine(self.version)
@@ -205,8 +198,8 @@ class Workbook:
         if destination.suffix.lower() not in {".twb", ".twbx"}:
             raise InvalidWorkbookError("Workbook path must end with .twb or .twbx")
 
-        errors = self._validate_for_save()
-        for issue in errors:
+        issues = self._validate_for_save()
+        for issue in issues:
             if issue.level == "error":
                 raise SchemaValidationError(f"Workbook is invalid: {issue}")
 
