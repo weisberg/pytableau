@@ -5,6 +5,7 @@ on:
 
 permissions:
   contents: read
+  id-token: write
 
 jobs:
   pypi:
@@ -19,16 +20,10 @@ jobs:
           python-version: "3.12"
 
       - name: Install build tooling
-        run: python -m pip install --upgrade pip build twine
+        run: python -m pip install --upgrade pip build
 
       - name: Build distribution artifacts
         run: python -m build
 
-      - name: Check artifacts before upload
-        run: twine check dist/*
-
       - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
-        run: twine upload dist/*
+        uses: pypa/gh-action-pypi-publish@release/v1
