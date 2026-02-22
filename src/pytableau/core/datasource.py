@@ -6,16 +6,20 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
 import warnings
 from typing import TYPE_CHECKING, Iterable
 
 from lxml import etree
 
+from pytableau.data.extract import ExtractManager
 from pytableau.constants import DataType, Role
 from pytableau.exceptions import (
     ConnectionError,
     DuplicateFieldError,
     FieldNotFoundError,
+    HyperError,
 )
 from pytableau.xml.proxy import XMLNodeProxy
 
@@ -178,6 +182,87 @@ class Datasource(XMLNodeProxy):
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
         self._regular_fields = [f for f in self._fields if isinstance(f, Field) and not isinstance(f, (CalculatedField, Parameter))]
+        self._hyper_path = self._discover_hyper_path()
+        self._hyper_bridge = None
+        self._extract_manager = ExtractManager()
+
+    @property
+    def hyper(self):
+        """Provide .hyper operations for extracted datasources."""
+        if self._hyper_path is None:
+            raise HyperError("No .hyper extract attached to this datasource.")
+        if self._hyper_bridge is None:
+            from pytableau.data.bridge import HyperBridge
+
+            self._hyper_bridge = HyperBridge(
+                self._hyper_path,
+                on_write=self._sync_extracted_metadata,
+            )
+        return self._hyper_bridge
+
+    def _discover_hyper_path(self) -> "Path | None":
+        for connection in self.connections:
+            if connection.class_ != "hyper":
+                continue
+            for attr in ("filename", "path", "dbName", "dbname", "name"):
+                value = connection._node.get(attr)
+                if value and str(value).lower().endswith(".hyper"):
+                    return self._resolve_hyper_candidate(Path(value))
+        return None
+
+    def _resolve_hyper_candidate(self, value: Path) -> Path:
+        if value.is_absolute():
+            return value
+
+        base = self._package_data_root()
+        if base is None:
+            return value
+
+        candidates = [
+            base / value,
+            base / "Data" / value,
+            base / "Data" / value.name,
+            base / "Data" / "Datasources" / value.name,
+            base / "datasources" / value.name,
+        ]
+        for candidate in candidates:
+            if candidate.exists():
+                return candidate
+        return base / "Data" / value.name
+
+    def _package_data_root(self) -> Path | None:
+        if self._workbook is None:
+            return None
+        if self._workbook._package_manager is not None:
+            return self._workbook._package_manager.twb_path.parent
+        return self._workbook._path.parent if self._workbook._path is not None else None
+
+    def _connection_safe_name(self) -> str:
+        text = re.sub(r"[^A-Za-z0-9_-]", "_", self.name or "datasource")
+        return text[:32] or "datasource"
+
+    def _set_hyper_path(self, path: "Path | str | None") -> None:
+        if path is None:
+            self._hyper_path = None
+            self._hyper_bridge = None
+            return
+        self._hyper_path = Path(path)
+        self._hyper_bridge = None
+
+    def _sync_extracted_metadata(self, df, table: str = "Extract") -> None:
+        self._extract_manager.sync_metadata_records(self, df)
+
+    def create_extract(self, df, table: str = "Extract") -> None:
+        self._extract_manager.create(self, df, table=table)
+
+    def refresh_extract(self, df, table: str = "Extract") -> None:
+        self._extract_manager.refresh(self, df, table=table)
+
+    def attach_extract(self, path: Path | str) -> None:
+        self._extract_manager.attach(self, path)
+
+    def detach_extract(self) -> None:
+        self._extract_manager.detach(self)
 
     @property
     def is_parameters(self) -> bool:
