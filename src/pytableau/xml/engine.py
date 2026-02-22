@@ -11,7 +11,6 @@ from pytableau.constants import (
 )
 from pytableau.exceptions import ValidationIssue
 
-
 _KNOWN_TAGS = {
     "workbook",
     "datasources",
@@ -85,7 +84,7 @@ class XMLSchemaEngine:
 
         return issues
 
-    def validate_workbook(self, tree: etree.ElementTree) -> list[ValidationIssue]:
+    def validate_workbook(self, tree: etree._ElementTree) -> list[ValidationIssue]:
         root = tree.getroot()
         issues: list[ValidationIssue] = []
 
@@ -123,7 +122,7 @@ class XMLSchemaEngine:
 
         return issues
 
-    def is_compatible(self, tree: etree.ElementTree, target_version: str) -> bool:
+    def is_compatible(self, tree: etree._ElementTree, target_version: str) -> bool:
         issues = self.validate_workbook(tree)
         is_known_target = target_version in TABLEAU_VERSION_MAP
         if not is_known_target:

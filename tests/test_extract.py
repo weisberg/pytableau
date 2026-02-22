@@ -1,9 +1,10 @@
 from __future__ import annotations
 
-import pytest
-from lxml import etree
 from pathlib import Path
 from zipfile import ZipFile
+
+import pytest
+from lxml import etree
 
 from pytableau.core.workbook import Workbook
 

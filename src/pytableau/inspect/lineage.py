@@ -49,7 +49,7 @@ class CalculatedFieldLineage:
 class FieldLineage:
     """Build and query calculated-field dependency graphs for a workbook."""
 
-    def __init__(self, workbook: "Workbook") -> None:
+    def __init__(self, workbook: Workbook) -> None:
         self.workbook = workbook
         self._entries: list[CalculatedFieldLineage] = self._build()
 

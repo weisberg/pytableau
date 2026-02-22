@@ -87,6 +87,7 @@ ignore_missing_imports = true
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "--tb=short -q"
+pythonpath = ["src"]
 markers = [
     "requires_hyper: tests that require optional hyper/pandas dependencies",
 ]

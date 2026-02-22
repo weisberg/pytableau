@@ -11,7 +11,6 @@ Quickstart::
 
 from __future__ import annotations
 
-from pytableau.core.workbook import Workbook
 from pytableau._version import __version__
 from pytableau.constants import (
     AggregationType,
@@ -24,6 +23,7 @@ from pytableau.constants import (
     SortOrder,
     ValidationLevel,
 )
+from pytableau.core.workbook import Workbook
 from pytableau.exceptions import (
     AuthenticationError,
     ConnectionError,

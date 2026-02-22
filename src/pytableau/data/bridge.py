@@ -89,15 +89,14 @@ class HyperBridge:
         if endpoint is None or connection_ctor is None:
             raise HyperError("Unsupported tableauhyperapi API: expected HyperProcess and Connection.")
 
-        with endpoint() as process:
-            with connection_ctor(
-                endpoint=process.endpoint,
-                database=str(self.path),
-                create_if_missing=False,
-            ) as connection:
-                if not hasattr(connection, "execute_command"):
-                    raise HyperError("Unsupported tableauhyperapi Connection API.")
-                connection.execute_command(sql)
+        with endpoint() as process, connection_ctor(
+            endpoint=process.endpoint,
+            database=str(self.path),
+            create_if_missing=False,
+        ) as connection:
+            if not hasattr(connection, "execute_command"):
+                raise HyperError("Unsupported tableauhyperapi Connection API.")
+            connection.execute_command(sql)
 
     def _run_query(self, sql: str, *, hyperapi: Any):
         endpoint = getattr(hyperapi, "HyperProcess", None)
@@ -105,26 +104,25 @@ class HyperBridge:
         if endpoint is None or connection_ctor is None:
             raise HyperError("Unsupported tableauhyperapi API: expected HyperProcess and Connection.")
 
-        with endpoint() as process:
-            with connection_ctor(
-                endpoint=process.endpoint,
-                database=str(self.path),
-                create_if_missing=False,
-            ) as connection:
-                if hasattr(connection, "execute_query"):
-                    result = connection.execute_query(sql)
-                    rows = list(result.fetchall()) if hasattr(result, "fetchall") else list(result)
-                    descriptions = getattr(result, "description", None)
-                    columns = []
-                    if descriptions:
-                        for column in descriptions:
-                            columns.append(str(getattr(column, "name", "")) or "")
-                elif hasattr(connection, "execute_list_query"):
-                    rows = connection.execute_list_query(sql)
-                    columns = [f"column_{idx}" for idx in range(len(rows[0]))] if rows else []
-                else:
-                    raise HyperError("Unsupported tableauhyperapi Connection API.")
-                return self._rows_to_dataframe(rows, columns)
+        with endpoint() as process, connection_ctor(
+            endpoint=process.endpoint,
+            database=str(self.path),
+            create_if_missing=False,
+        ) as connection:
+            if hasattr(connection, "execute_query"):
+                result = connection.execute_query(sql)
+                rows = list(result.fetchall()) if hasattr(result, "fetchall") else list(result)
+                descriptions = getattr(result, "description", None)
+                columns = []
+                if descriptions:
+                    for column in descriptions:
+                        columns.append(str(getattr(column, "name", "")) or "")
+            elif hasattr(connection, "execute_list_query"):
+                rows = connection.execute_list_query(sql)
+                columns = [f"column_{idx}" for idx in range(len(rows[0]))] if rows else []
+            else:
+                raise HyperError("Unsupported tableauhyperapi Connection API.")
+            return self._rows_to_dataframe(rows, columns)
 
     def _rows_to_dataframe(self, rows: list[tuple[Any, ...]], columns: list[str]):
         pandas_module = self._require(_pandas, "pandas")

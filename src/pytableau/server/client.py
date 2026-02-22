@@ -5,8 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from pytableau._compat import _MissingDependency, import_optional
-from pytableau.exceptions import AuthenticationError, PublishError, ServerError
-
+from pytableau.exceptions import AuthenticationError, ServerError
 
 _tsc = import_optional("tableauserverclient", "server")
 
@@ -33,7 +32,7 @@ class ServerClient:
         **_: object,
     ) -> None:
         tsc = _require_server_module()
-        server_ctor = getattr(tsc, "Server")
+        server_ctor = tsc.Server
         self.server = server_ctor(server_url, use_server_version=use_server_version)
         self.site_id = site_id
         self._tsc = tsc
@@ -47,7 +46,7 @@ class ServerClient:
         finally:
             self._signed_in = False
 
-    def __enter__(self) -> "ServerClient":
+    def __enter__(self) -> ServerClient:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:

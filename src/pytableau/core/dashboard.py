@@ -34,7 +34,7 @@ class Zone:
     y: int | float | None
     w: int | float | None
     h: int | float | None
-    children: list["Zone"]
+    children: list[Zone]
 
     def replace_field_reference(self, old: str, new: str) -> None:
         _ = old, new  # future extension point
@@ -64,9 +64,8 @@ class Action:
     def replace_field_reference(self, old: str, new: str) -> None:
         old_norm = _normalise_field_name(old)
         new_token = _normalise_field_name(new)
-        if self.xml_node.get("field"):
-            if _normalise_field_name(self.xml_node.get("field", "")) == old_norm:
-                self.xml_node.set("field", f"[{new_token}]")
+        if self.xml_node.get("field") and _normalise_field_name(self.xml_node.get("field", "")) == old_norm:
+            self.xml_node.set("field", f"[{new_token}]")
         for node in self.xml_node.findall("field"):
             if _normalise_field_name(node.get("name", node.text or "")) == old_norm:
                 if node.get("name") is not None:
@@ -88,7 +87,7 @@ class Action:
 class Dashboard(XMLNodeProxy):
     """Read-only dashboard wrapper with simple parsing helpers."""
 
-    def __init__(self, node: etree._Element, workbook: "Workbook | None" = None) -> None:
+    def __init__(self, node: etree._Element, workbook: Workbook | None = None) -> None:
         super().__init__(node)
         self._workbook = workbook
         self.name = self.xml_node.get("name", "")
@@ -150,7 +149,7 @@ class Dashboard(XMLNodeProxy):
         payload = {"type": action_type, "name": name}
         if field is not None:
             payload["field"] = field
-        action_node = etree.SubElement(actions, "action", attrib=payload)
+        etree.SubElement(actions, "action", attrib=payload)
         self.actions = self._read_actions()
         action = self.actions[-1]
         return action
@@ -237,7 +236,7 @@ class Dashboard(XMLNodeProxy):
                     break
         if parent is None:
             parent = self.xml_node
-        zone_node = etree.SubElement(parent, "zone", attrib=attrs)
+        etree.SubElement(parent, "zone", attrib=attrs)
         self.zones = self._read_zones()
         return Zone(
             zone_type=zone_type,

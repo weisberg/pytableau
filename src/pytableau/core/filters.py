@@ -6,9 +6,10 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
-from typing import TYPE_CHECKING, Iterable
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
@@ -54,7 +55,7 @@ def _extract_values(node: etree._Element) -> list[str]:
     return values
 
 
-def parse_filter_node(node: etree._Element) -> "Filter":
+def parse_filter_node(node: etree._Element) -> Filter:
     raw_type = node.get("class", "wildcard")
     return Filter.from_xml(node, raw_type=_normalise_filter_type(raw_type))
 
@@ -89,7 +90,7 @@ class Filter(XMLNodeProxy):
     @classmethod
     def from_xml(
         cls, node: etree._Element, raw_type: str | None = None
-    ) -> "Filter":
+    ) -> Filter:
         discovered = _normalise_filter_type(raw_type or node.get("class", FilterType.WILDCARD.value))
         if discovered == FilterType.CATEGORICAL.value:
             return CategoricalFilter(node)
@@ -133,7 +134,7 @@ class CategoricalFilter(Filter):
         field: str,
         values: Iterable[str],
         include: bool = True,
-    ) -> "CategoricalFilter":
+    ) -> CategoricalFilter:
         node = etree.Element(
             "filter",
             attrib={
@@ -149,7 +150,7 @@ class CategoricalFilter(Filter):
         return cls(node)
 
     @classmethod
-    def from_xml(cls, node: etree._Element) -> "CategoricalFilter":
+    def from_xml(cls, node: etree._Element) -> CategoricalFilter:
         return cls(node)
 
     @property
@@ -186,7 +187,7 @@ class RangeFilter(Filter):
         maximum: float | int | str | None = None,
         include_min: bool = True,
         include_max: bool = True,
-    ) -> "RangeFilter":
+    ) -> RangeFilter:
         node = etree.Element(
             "filter",
             attrib={
@@ -203,7 +204,7 @@ class RangeFilter(Filter):
         return cls(node)
 
     @classmethod
-    def from_xml(cls, node: etree._Element) -> "RangeFilter":
+    def from_xml(cls, node: etree._Element) -> RangeFilter:
         return cls(node)
 
     @property
@@ -240,7 +241,7 @@ class RelativeDateFilter(Filter):
         field: str,
         range_size: int,
         range_unit: str,
-    ) -> "RelativeDateFilter":
+    ) -> RelativeDateFilter:
         node = etree.Element(
             "filter",
             attrib={
@@ -253,7 +254,7 @@ class RelativeDateFilter(Filter):
         return cls(node)
 
     @classmethod
-    def from_xml(cls, node: etree._Element) -> "RelativeDateFilter":
+    def from_xml(cls, node: etree._Element) -> RelativeDateFilter:
         return cls(node)
 
     @property
@@ -289,7 +290,7 @@ class TopNFilter(Filter):
         measure: str,
         n: int,
         direction: str = "top",
-    ) -> "TopNFilter":
+    ) -> TopNFilter:
         node = etree.Element(
             "filter",
             attrib={
@@ -303,7 +304,7 @@ class TopNFilter(Filter):
         return cls(node)
 
     @classmethod
-    def from_xml(cls, node: etree._Element) -> "TopNFilter":
+    def from_xml(cls, node: etree._Element) -> TopNFilter:
         return cls(node)
 
     @property

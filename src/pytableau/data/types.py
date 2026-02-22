@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 _NORMALIZED_PANDAS_TYPES = {
     "object": "TEXT",
     "string": "TEXT",

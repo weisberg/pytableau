@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 class WorkbookReport:
     """Generate human-readable markdown documentation for a workbook."""
 
-    workbook: "Workbook"
+    workbook: Workbook
 
     def to_markdown(self) -> str:
         payload = WorkbookCatalog(self.workbook).to_dict()

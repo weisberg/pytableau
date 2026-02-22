@@ -4,18 +4,22 @@ from __future__ import annotations
 
 from collections.abc import Iterable
 from pathlib import Path
-from typing import Any
+
 from lxml import etree
 
-from pytableau.templates.mapping import FieldMapping, find_placeholders, is_placeholder, PLACEHOLDER_PATTERN
 from pytableau.exceptions import UnmappedPlaceholderError
+from pytableau.templates.mapping import (
+    FieldMapping,
+    find_placeholders,
+    is_placeholder,
+)
 
 
 class TemplateEngine:
     """Operate on a workbook XML tree and replace placeholder tokens."""
 
     def __init__(self, tree: etree._ElementTree | etree._Element | Path | str) -> None:
-        if isinstance(tree, (str, Path)):
+        if isinstance(tree, str | Path):
             self._tree = etree.parse(str(tree))
         elif isinstance(tree, etree._ElementTree):
             self._tree = tree
@@ -41,7 +45,7 @@ class TemplateEngine:
                 tokens.update(find_placeholders(value))
         return tokens
 
-    def map_fields(self, mapping: dict[str, str], *, strict: bool = True) -> "TemplateEngine":
+    def map_fields(self, mapping: dict[str, str], *, strict: bool = True) -> TemplateEngine:
         """Replace placeholders with concrete field names.\n\n        Example: ``{\"__MEASURE__\": \"Sales\"}``.\n        """
         if any(not is_placeholder(key) for key in mapping):
             bad = [key for key in mapping if not is_placeholder(key)]
@@ -56,7 +60,7 @@ class TemplateEngine:
             )
         return self
 
-    def replace_datasource_placeholders(self, mapping: dict[str, str], *, strict: bool = True) -> "TemplateEngine":
+    def replace_datasource_placeholders(self, mapping: dict[str, str], *, strict: bool = True) -> TemplateEngine:
         """Replace datasource placeholders in names/ids as part of template wiring."""
         if any(not is_placeholder(key) for key in mapping):
             bad = [key for key in mapping if not is_placeholder(key)]
@@ -102,7 +106,7 @@ class TemplateEngine:
                     if value:
                         yield value
 
-    def map_datasource(self, mapping: dict[str, str], *, strict: bool = True) -> "TemplateEngine":
+    def map_datasource(self, mapping: dict[str, str], *, strict: bool = True) -> TemplateEngine:
         """Backward-compatible alias for datasource placeholder replacement."""
         if not mapping:
             return self

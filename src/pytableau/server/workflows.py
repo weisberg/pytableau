@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 from pytableau.core.workbook import Workbook
 from pytableau.server.client import ServerClient
@@ -37,6 +37,7 @@ def publish_workbook(
             project_id=project_id,
             name=name,
             overwrite=overwrite,
+            **auth,
         )
 
 
@@ -52,16 +53,15 @@ def refresh_workbook(
     **auth: object,
 ) -> Workbook:
     """Download, mutate, republish, and return the local modified workbook."""
-    with ServerClient(server, **auth) as client:
-        with Workbook.open(
-            client.download_workbook(workbook_id, destination=destination, **auth)
-        ) as workbook:
-            modifier(workbook)
-            workbook.save_as(destination)
-            client.publish_workbook(
-                destination,
-                project_id=project_id,
-                name=name,
-                overwrite=overwrite,
-            )
-            return workbook
+    with ServerClient(server, **auth) as client, Workbook.open(
+        client.download_workbook(workbook_id, destination=destination, **auth)
+    ) as workbook:
+        modifier(workbook)
+        workbook.save_as(destination)
+        client.publish_workbook(
+            destination,
+            project_id=project_id,
+            name=name,
+            overwrite=overwrite,
+        )
+        return workbook

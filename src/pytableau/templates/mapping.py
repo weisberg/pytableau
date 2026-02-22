@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
-
 _PLACEHOLDER_RE = re.compile(r"__[A-Z][A-Z0-9_]*__")
 
 #: Regex pattern that matches template placeholder names.

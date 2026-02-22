@@ -19,9 +19,9 @@ from pytableau.inspect.catalog import WorkbookCatalog
 from pytableau.inspect.lineage import FieldLineage
 from pytableau.inspect.report import WorkbookReport
 from pytableau.package.manager import PackageManager
-from pytableau.xml.engine import XMLSchemaEngine
 from pytableau.templates.engine import TemplateEngine
 from pytableau.templates.library import get_template_path
+from pytableau.xml.engine import XMLSchemaEngine
 
 from .dashboard import Dashboard, DashboardCollection
 from .datasource import Datasource, DatasourceCollection
@@ -76,7 +76,7 @@ class Workbook:
             self._package_manager.close()
             self._package_manager = None
 
-    def __enter__(self) -> "Workbook":
+    def __enter__(self) -> Workbook:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -91,7 +91,7 @@ class Workbook:
         return self._tree
 
     @classmethod
-    def open(cls, path: str | Path) -> "Workbook":
+    def open(cls, path: str | Path) -> Workbook:
         """Open an existing ``.twb`` or ``.twbx`` file."""
         workbook_path = Path(path).expanduser()
         manager = PackageManager(workbook_path)
@@ -118,7 +118,7 @@ class Workbook:
         return wb
 
     @classmethod
-    def new(cls, version: str = DEFAULT_TABLEAU_VERSION) -> "Workbook":
+    def new(cls, version: str = DEFAULT_TABLEAU_VERSION) -> Workbook:
         """Create a new, empty workbook."""
         source_build = TABLEAU_VERSION_MAP.get(
             version,
@@ -141,7 +141,7 @@ class Workbook:
         return wb
 
     @classmethod
-    def from_template(cls, template: str | Path, **kwargs: object) -> "Workbook":
+    def from_template(cls, template: str | Path, **kwargs: object) -> Workbook:
         """Construct a workbook from a built-in or custom template."""
         template_path = Path(template).expanduser() if isinstance(template, Path) else Path(str(template))
         if not template_path.suffix:
@@ -158,13 +158,13 @@ class Workbook:
             raise InvalidWorkbookError(f"Unable to parse template workbook: {template_path}") from exc
 
         wb = cls()
-        wb._load_tree(tree)
         wb._template_engine = TemplateEngine(tree)
         if kwargs:
             wb._template_engine.map_fields(
                 {str(k): str(v) for k, v in kwargs.items()},
                 strict=False,
             )
+        wb._load_tree(tree)
         return wb
 
     @property
@@ -181,7 +181,7 @@ class Workbook:
         self._version = version
         self.xml_root.set("source-build", source_build)
 
-    def merge(self, other: "Workbook", *, conflict_suffix: str = " (imported)") -> None:
+    def merge(self, other: Workbook, *, conflict_suffix: str = " (imported)") -> None:
         """Merge datasource, worksheet, and dashboard nodes from another workbook."""
         if not isinstance(other, Workbook):
             raise TypeError("Workbook.merge() accepts only Workbook instances")
@@ -255,7 +255,7 @@ class Workbook:
             dashboards.append(Dashboard(node, workbook=self))
         self.dashboards = DashboardCollection(dashboards)
 
-    def _validate_for_save(self) -> list["ValidationIssue"]:
+    def _validate_for_save(self) -> list[ValidationIssue]:
         engine = XMLSchemaEngine(self.version)
         return engine.validate_workbook(self._tree)
 
@@ -324,7 +324,7 @@ class Workbook:
             with ServerClient(server, **auth) as client:
                 client.publish_workbook(publish_path, project_id=project)
 
-    def download(self, server: str, workbook_id: str, **auth: object) -> "Workbook":
+    def download(self, server: str, workbook_id: str, **auth: object) -> Workbook:
         """Download a workbook from Tableau Server or Cloud and return it as a Workbook."""
         from pytableau.server.client import ServerClient
 
@@ -347,6 +347,6 @@ class Workbook:
         )
         return xml.decode("utf-8")
 
-    def validate(self) -> list["ValidationIssue"]:
+    def validate(self) -> list[ValidationIssue]:
         """Validate the workbook XML against known schema rules."""
         return self._validate_for_save()

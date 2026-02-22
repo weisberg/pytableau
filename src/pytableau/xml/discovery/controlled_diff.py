@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
-from pathlib import Path
-from lxml import etree
 from dataclasses import dataclass
 from difflib import ndiff
+from pathlib import Path
+
+from lxml import etree
 
 
 @dataclass

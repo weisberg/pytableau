@@ -6,9 +6,9 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import re
 import warnings
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from lxml import etree
@@ -73,7 +73,7 @@ class FieldReference:
     name: str
 
     @classmethod
-    def parse(cls, text: str) -> "FieldReference":
+    def parse(cls, text: str) -> FieldReference:
         normalized = _normalise_field_caption(text)
         return cls(normalized)
 
@@ -84,9 +84,9 @@ class FieldReference:
 class FieldCollection:
     """Dictionary-like collection of fields keyed by caption."""
 
-    def __init__(self, fields: list["Field"] | None = None) -> None:
-        self._fields: list["Field"] = list(fields or [])
-        self._by_caption: dict[str, "Field"] = {}
+    def __init__(self, fields: list[Field] | None = None) -> None:
+        self._fields: list[Field] = list(fields or [])
+        self._by_caption: dict[str, Field] = {}
         self._index()
 
     def _index(self) -> None:
@@ -102,7 +102,7 @@ class FieldCollection:
     def __len__(self) -> int:
         return len(self._fields)
 
-    def __getitem__(self, key: int | str) -> "Field":
+    def __getitem__(self, key: int | str) -> Field:
         if isinstance(key, int):
             return self._fields[key]
         if not isinstance(key, str):
@@ -118,7 +118,7 @@ class FieldCollection:
             return item in self._fields
         return False
 
-    def add(self, field: "Field") -> None:
+    def add(self, field: Field) -> None:
         self._fields.append(field)
         self._index()
 
@@ -128,14 +128,14 @@ class FieldCollection:
         self._fields = [f for f in self._fields if f is not target]
         self._index()
 
-    def get(self, caption: str, default: "Field | None" = None) -> "Field | None":
+    def get(self, caption: str, default: Field | None = None) -> Field | None:
         return self._by_caption.get(_normalise_field_caption(caption), default)
 
 
 class CalcFieldCollection(FieldCollection):
     """Collection for calculated fields."""
 
-    def add(self, field: "CalculatedField") -> None:
+    def add(self, field: CalculatedField) -> None:
         if not isinstance(field, CalculatedField):
             raise TypeError("calc field collection accepts only CalculatedField instances")
         super().add(field)
@@ -144,7 +144,7 @@ class CalcFieldCollection(FieldCollection):
 class Field(XMLNodeProxy):
     """A Tableau field represented by a ``<column>`` element."""
 
-    def __init__(self, node: etree._Element, datasource: "Datasource | None" = None) -> None:
+    def __init__(self, node: etree._Element, datasource: Datasource | None = None) -> None:
         super().__init__(node)
         self._datasource = datasource
 
@@ -283,7 +283,7 @@ class Parameter(Field):
             return []
         values = []
         for member in node.findall("member"):
-            values.append((member.get("value") or (member.text or "").strip()))
+            values.append(member.get("value") or (member.text or "").strip())
         if not values:
             for value_node in node.findall("value"):
                 if value_node is not None:
@@ -360,10 +360,7 @@ class Parameter(Field):
     @datatype.setter
     def datatype(self, value: DataType | str) -> None:
         old_value = self.value
-        if isinstance(value, DataType):
-            normalized = value.value
-        else:
-            normalized = value
+        normalized = value.value if isinstance(value, DataType) else value
         if old_value is not None:
             try:
                 coerced = _coerce_value(old_value, normalized)

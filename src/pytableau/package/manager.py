@@ -85,7 +85,7 @@ class PackageManager:
 
         raise InvalidWorkbookError(f"Unsupported workbook path: {self.source}")
 
-    def __enter__(self) -> "PackageManager":
+    def __enter__(self) -> PackageManager:
         self._prepare()
         return self
 
@@ -124,7 +124,8 @@ class PackageManager:
         destination.parent.mkdir(parents=True, exist_ok=True)
 
         if destination.suffix.lower() == ".twb":
-            shutil.copy2(self.twb_path, destination)
+            if self.twb_path.resolve() != destination.resolve():
+                shutil.copy2(self.twb_path, destination)
             return destination
 
         if self.is_twbx:

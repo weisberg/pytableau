@@ -7,14 +7,15 @@
 from __future__ import annotations
 
 import re
-from pathlib import Path
 import warnings
-from typing import TYPE_CHECKING, Iterable
+from collections.abc import Iterable
+from pathlib import Path
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
-from pytableau.data.extract import ExtractManager
 from pytableau.constants import DataType, Role
+from pytableau.data.extract import ExtractManager
 from pytableau.exceptions import (
     ConnectionError,
     DuplicateFieldError,
@@ -28,7 +29,6 @@ from .fields import (
     CalculatedField,
     Field,
     FieldCollection,
-    FieldReference,
     Parameter,
 )
 
@@ -171,7 +171,7 @@ class Relation(XMLNodeProxy):
 class Datasource(XMLNodeProxy):
     """Read/write wrapper for a Tableau ``<datasource>`` node."""
 
-    def __init__(self, node: etree._Element, workbook: "Workbook | None" = None) -> None:
+    def __init__(self, node: etree._Element, workbook: Workbook | None = None) -> None:
         super().__init__(node)
         self._workbook = workbook
         self.name: str = self.xml_node.get("name", "")
@@ -181,7 +181,7 @@ class Datasource(XMLNodeProxy):
         self._fields = self._read_fields()
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
-        self._regular_fields = [f for f in self._fields if isinstance(f, Field) and not isinstance(f, (CalculatedField, Parameter))]
+        self._regular_fields = [f for f in self._fields if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)]
         self._hyper_path = self._discover_hyper_path()
         self._hyper_bridge = None
         self._extract_manager = ExtractManager()
@@ -200,7 +200,7 @@ class Datasource(XMLNodeProxy):
             )
         return self._hyper_bridge
 
-    def _discover_hyper_path(self) -> "Path | None":
+    def _discover_hyper_path(self) -> Path | None:
         for connection in self.connections:
             if connection.class_ != "hyper":
                 continue
@@ -241,7 +241,7 @@ class Datasource(XMLNodeProxy):
         text = re.sub(r"[^A-Za-z0-9_-]", "_", self.name or "datasource")
         return text[:32] or "datasource"
 
-    def _set_hyper_path(self, path: "Path | str | None") -> None:
+    def _set_hyper_path(self, path: Path | str | None) -> None:
         if path is None:
             self._hyper_path = None
             self._hyper_bridge = None
@@ -316,7 +316,7 @@ class Datasource(XMLNodeProxy):
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
         self._regular_fields = [
-            f for f in self._fields if isinstance(f, Field) and not isinstance(f, (CalculatedField, Parameter))
+            f for f in self._fields if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)
         ]
 
     def swap_connection(self, **kwargs: str | int | None) -> None:

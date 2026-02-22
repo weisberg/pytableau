@@ -28,10 +28,10 @@ class XMLNodeProxy:
         node: The ``lxml`` element this object wraps.
     """
 
-    def __init__(self, node: etree.Element) -> None:
-        self._node: etree.Element = node
+    def __init__(self, node: etree._Element) -> None:
+        self._node: etree._Element = node
 
     @property
-    def xml_node(self) -> etree.Element:
+    def xml_node(self) -> etree._Element:
         """The underlying ``lxml`` XML element (raw escape hatch)."""
         return self._node

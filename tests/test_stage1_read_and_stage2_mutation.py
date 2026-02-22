@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+
 from lxml import etree
 
 from pytableau.constants import FilterType

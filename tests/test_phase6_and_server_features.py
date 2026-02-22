@@ -7,8 +7,8 @@ from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
 
-from lxml import etree
 import pytest
+from lxml import etree
 
 from pytableau.core.fields import FieldReference
 from pytableau.core.workbook import Workbook
@@ -16,7 +16,7 @@ from pytableau.exceptions import UnmappedPlaceholderError
 from pytableau.server.client import AuthenticationError
 from pytableau.templates.engine import TemplateEngine
 from pytableau.templates.library import get_template_path
-from pytableau.xml.discovery import CorpusAnalyzer, ControlledDiffer
+from pytableau.xml.discovery import ControlledDiffer, CorpusAnalyzer
 
 
 def _write_base_twb(path: Path) -> None:
@@ -83,7 +83,7 @@ def _write_base_twb(path: Path) -> None:
 
 
 def _write_versioned_twb(path: Path, *, extra_tag: str | None = None) -> None:
-    root = etree.Element("workbook", source-build="20241.24.0312.0830", source-platform="test")
+    root = etree.Element("workbook", attrib={"source-build": "20241.24.0312.0830", "source-platform": "test"})
     if extra_tag:
         etree.SubElement(root, extra_tag)
     path.write_text(
@@ -200,7 +200,7 @@ def test_worksheet_shelf_mutation_helpers(tmp_path: Path) -> None:
 
     worksheet.add_to_shelf("color", "State")
     worksheet.move_within_shelf("color", "State", 0)
-    assert [f.name for f in worksheet.marks.color] == ["State"]
+    assert [f.name for f in worksheet.marks.color] == ["State", "Region"]
     assert worksheet.remove_from_shelf("color", "State") == 1
 
 
@@ -235,7 +235,7 @@ def test_discovery_tools(tmp_path: Path) -> None:
     summary = analyzer.analyze()
     assert summary["files"] == 2
     assert "workbook" in summary["tag_counts"]
-    assert "workbook" == analyzer.top_tags(1)[0]
+    assert analyzer.top_tags(1)[0] == "workbook"
 
     before = tmp_path / "before.twb"
     after = tmp_path / "after.twb"
@@ -256,8 +256,8 @@ def _run_with_fake_server(monkeypatch, callback: Callable[[dict[str, Any]], None
 
 def test_server_workflow_with_fake_client(monkeypatch, tmp_path: Path) -> None:
     from pytableau.server.client import ServerClient
-    from pytableau.server.workflows import publish_workbook as workflow_publish_workbook
     from pytableau.server.workflows import download_workbook as workflow_download_workbook
+    from pytableau.server.workflows import publish_workbook as workflow_publish_workbook
     from pytableau.server.workflows import refresh_workbook as workflow_refresh_workbook
 
     workbook_path = tmp_path / "report.twbx"

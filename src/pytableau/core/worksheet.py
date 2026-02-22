@@ -16,16 +16,16 @@ from pytableau.constants import FilterType, MarkType
 from pytableau.exceptions import FieldNotFoundError
 from pytableau.xml.proxy import XMLNodeProxy
 
+from .datasource import _normalise_field_name
+from .fields import FieldReference
 from .filters import (
     CategoricalFilter,
     Filter,
-    RelativeDateFilter,
     RangeFilter,
+    RelativeDateFilter,
     TopNFilter,
     parse_filter_node,
 )
-from .datasource import _normalise_field_name
-from .fields import FieldReference
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
@@ -73,7 +73,7 @@ class Worksheet(XMLNodeProxy):
 
     _MARK_CHANNELS = ("color", "size", "detail", "tooltip", "label")
 
-    def __init__(self, node: etree._Element, workbook: "Workbook | None" = None) -> None:
+    def __init__(self, node: etree._Element, workbook: Workbook | None = None) -> None:
         super().__init__(node)
         self._workbook = workbook
         self.name: str = self.xml_node.get("name", "")
@@ -145,7 +145,7 @@ class Worksheet(XMLNodeProxy):
         index: int | None = None,
     ) -> None:
         """Append ``field`` to a shelf or mark channel."""
-        shelf_key = _normalize_ref(shelf)
+        shelf_key = _normalise_ref(shelf)
         targets = self._get_shelf_lists(shelf_key)
         if targets is None:
             raise ValueError(f"Unsupported shelf '{shelf}'")
@@ -317,10 +317,7 @@ class Worksheet(XMLNodeProxy):
         else:
             datasources = list(self._workbook.datasources)
 
-        for ds in datasources:
-            if ds.get_field(target) is not None:
-                return True
-        return False
+        return any(ds.get_field(target) is not None for ds in datasources)
 
     def add_filter(self, field: str, filter_type: FilterType | str, **kwargs) -> Filter:
         if not self._field_exists(field):

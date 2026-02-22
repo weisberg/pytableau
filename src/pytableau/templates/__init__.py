@@ -11,8 +11,8 @@ use pytableau to substitute real field names and data at runtime.
 from __future__ import annotations
 
 from pytableau.templates.engine import TemplateEngine
-from pytableau.templates.mapping import FieldMapping, PLACEHOLDER_PATTERN, find_placeholders
 from pytableau.templates.library import BUILTIN_TEMPLATES, get_template_path
+from pytableau.templates.mapping import PLACEHOLDER_PATTERN, FieldMapping, find_placeholders
 
 __all__ = [
     "TemplateEngine",

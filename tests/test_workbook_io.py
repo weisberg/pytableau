@@ -5,8 +5,8 @@ from pathlib import Path
 
 from lxml import etree
 
-from pytableau.package.manager import PackageManager
 from pytableau.core.workbook import Workbook
+from pytableau.package.manager import PackageManager
 
 
 def _write_minimal_twb(path: Path) -> None:

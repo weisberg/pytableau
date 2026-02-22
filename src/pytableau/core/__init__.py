@@ -6,18 +6,18 @@ concepts: Workbook, Datasource, Worksheet, Dashboard, and field-like objects.
 
 from __future__ import annotations
 
-from .datasource import Datasource, DatasourceCollection
 from .dashboard import Dashboard, DashboardCollection
+from .datasource import Datasource, DatasourceCollection
 from .fields import (
-    CalculatedField,
     CalcFieldCollection,
+    CalculatedField,
     Field,
     FieldCollection,
     FieldReference,
     Parameter,
 )
-from .worksheet import MarkCard, Worksheet, WorksheetCollection
 from .workbook import Workbook
+from .worksheet import MarkCard, Shelf, Worksheet, WorksheetCollection
 
 __all__ = [
     "Workbook",
@@ -33,4 +33,6 @@ __all__ = [
     "CalculatedField",
     "FieldReference",
     "Parameter",
+    "MarkCard",
+    "Shelf",
 ]

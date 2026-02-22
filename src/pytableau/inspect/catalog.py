@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 class WorkbookCatalog:
     """Aggregate read-only catalog for a workbook."""
 
-    workbook: "Workbook"
+    workbook: Workbook
 
     @property
     def datasources(self) -> list:
