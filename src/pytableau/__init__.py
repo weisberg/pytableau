@@ -11,6 +11,7 @@ Quickstart::
 
 from __future__ import annotations
 
+from pytableau.core.workbook import Workbook
 from pytableau._version import __version__
 from pytableau.constants import (
     AggregationType,
@@ -78,6 +79,7 @@ __all__ = [
     "UnmappedPlaceholderError",
     "TemplateNotFoundError",
     "ValidationIssue",
+    "Workbook",
     # Enums
     "MarkType",
     "DataType",

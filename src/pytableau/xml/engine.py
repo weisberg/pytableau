@@ -1,39 +1,50 @@
-"""XMLSchemaEngine: validation and version-aware schema rules.
-
-The schema engine is the gatekeeper for all XML mutations in pytableau.
-Every change to a workbook's XML tree passes through here before the file
-is written, ensuring we never produce a corrupt ``.twb``.
-
-.. note::
-    Full implementation is tracked in Phase 1 of the development plan.
-    Phase 0 ships the class skeleton and interface contract.
-"""
+"""XML schema validation and version-aware compatibility helpers."""
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from lxml import etree
 
+from pytableau.constants import (
+    DEFAULT_TABLEAU_VERSION,
+    TABLEAU_VERSION_MAP,
+    ValidationLevel,
+)
 from pytableau.exceptions import ValidationIssue
 
-if TYPE_CHECKING:
-    from lxml import etree
+
+_KNOWN_TAGS = {
+    "workbook",
+    "datasources",
+    "datasource",
+    "relations",
+    "relation",
+    "worksheets",
+    "worksheet",
+    "dashboards",
+    "dashboard",
+    "column",
+    "parameter",
+    "filter",
+}
 
 
 class XMLSchemaEngine:
-    """Validates XML mutations against known Tableau schema rules.
+    """Validates XML mutations against known Tableau schema rules."""
 
-    The engine operates in a version-aware mode: rules that apply to
-    Tableau 2024.x may differ from those for 2022.x.  The ``version``
-    parameter controls which rule set is active.
-
-    Args:
-        version: Tableau version string (e.g. ``"2024.1"``).  Must be one
-            of the versions listed in
-            :data:`~pytableau.constants.TABLEAU_VERSION_MAP`.
-    """
-
-    def __init__(self, version: str = "2024.1") -> None:
+    def __init__(self, version: str = DEFAULT_TABLEAU_VERSION) -> None:
         self.version = version
+
+    def _normalise_version(self, version: str | None) -> str:
+        if not version:
+            return self.version
+        if version in TABLEAU_VERSION_MAP:
+            return version
+        if version in TABLEAU_VERSION_MAP.values():
+            return next(
+                (k for k, v in TABLEAU_VERSION_MAP.items() if v == version),
+                self.version,
+            )
+        return self.version
 
     def validate_element(
         self,
@@ -42,38 +53,79 @@ class XMLSchemaEngine:
         attributes: dict[str, str],
         version: str | None = None,
     ) -> list[ValidationIssue]:
-        """Validate a single XML element in context.
+        issues: list[ValidationIssue] = []
+        resolved_version = self._normalise_version(version)
 
-        Args:
-            tag: The element tag name (e.g. ``"column"``).
-            parent_tag: The tag name of the parent element.
-            attributes: Dictionary of attribute name → value pairs.
-            version: Override the engine version for this check.
+        if tag not in _KNOWN_TAGS:
+            issues.append(
+                ValidationIssue(
+                    ValidationLevel.WARNING.value,
+                    f"Unknown Tableau XML tag '{tag}' under <{parent_tag}>.",
+                    path=f"/{parent_tag}/{tag}",
+                )
+            )
 
-        Returns:
-            A (possibly empty) list of :class:`~pytableau.exceptions.ValidationIssue`.
-        """
-        raise NotImplementedError
+        if resolved_version not in TABLEAU_VERSION_MAP:
+            issues.append(
+                ValidationIssue(
+                    ValidationLevel.WARNING.value,
+                    f"Unknown or unsupported Tableau version '{resolved_version}'.",
+                    path=f"/{parent_tag}/{tag}",
+                )
+            )
+
+        if tag == "workbook" and "name" in attributes:
+            issues.append(
+                ValidationIssue(
+                    ValidationLevel.INFO.value,
+                    "Workbench 'name' attribute on <workbook> is ignored by Tableau.",
+                    path=f"/{tag}",
+                )
+            )
+
+        return issues
 
     def validate_workbook(self, tree: etree.ElementTree) -> list[ValidationIssue]:
-        """Validate a complete workbook XML tree.
+        root = tree.getroot()
+        issues: list[ValidationIssue] = []
 
-        Args:
-            tree: The lxml ElementTree representing the full workbook.
+        if root.tag != "workbook":
+            issues.append(
+                ValidationIssue(
+                    ValidationLevel.ERROR.value,
+                    f"Invalid Tableau root node '{root.tag}'. Expected <workbook>.",
+                    path=f"/{root.tag}",
+                )
+            )
+            return issues
 
-        Returns:
-            All validation issues found, across every level of severity.
-        """
-        raise NotImplementedError
+        issues.extend(self.validate_element("workbook", "/", root.attrib, self.version))
+
+        for node in root.iterchildren():
+            if node.tag not in {"datasources", "worksheets", "dashboards"}:
+                continue
+            for child in node.iterchildren():
+                issues.extend(
+                    self.validate_element(
+                        child.tag, node.tag, dict(child.attrib), self.version
+                    )
+                )
+
+        source_build = root.attrib.get("source-build")
+        if source_build and source_build not in TABLEAU_VERSION_MAP.values():
+            issues.append(
+                ValidationIssue(
+                    ValidationLevel.WARNING.value,
+                    f"Workbook source-build '{source_build}' is not recognized.",
+                    path="/workbook/@source-build",
+                )
+            )
+
+        return issues
 
     def is_compatible(self, tree: etree.ElementTree, target_version: str) -> bool:
-        """Check whether a workbook XML tree is compatible with a given version.
-
-        Args:
-            tree: The workbook XML tree to check.
-            target_version: The Tableau version to check compatibility against.
-
-        Returns:
-            ``True`` if no ERROR-level compatibility issues are found.
-        """
-        raise NotImplementedError
+        issues = self.validate_workbook(tree)
+        is_known_target = target_version in TABLEAU_VERSION_MAP
+        if not is_known_target:
+            return False
+        return all(issue.level != ValidationLevel.ERROR.value for issue in issues)
