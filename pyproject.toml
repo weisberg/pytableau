@@ -1,0 +1,103 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "pytableau"
+version = "0.1.0"
+description = "The unified Python SDK for Tableau workbook engineering"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+keywords = ["tableau", "workbook", "twb", "twbx", "hyper", "data", "visualization"]
+classifiers = [
+    "Development Status :: 2 - Pre-Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Typing :: Typed",
+]
+dependencies = ["lxml>=4.9"]
+
+[project.optional-dependencies]
+hyper = ["tableauhyperapi>=0.0.19", "pantab>=5.0"]
+pandas = ["pandas>=2.0"]
+server = ["tableauserverclient>=0.30"]
+all = ["pytableau[hyper,pandas,server]"]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=1.8",
+    "ruff>=0.3",
+    "pre-commit>=3.0",
+    "lxml-stubs",
+    "click>=8.0",
+]
+
+[project.scripts]
+pytableau = "pytableau.cli.main:app"
+
+[project.urls]
+Homepage = "https://github.com/brianlwb/pytableau"
+Repository = "https://github.com/brianlwb/pytableau"
+"Bug Tracker" = "https://github.com/brianlwb/pytableau/issues"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pytableau"]
+
+# ---------------------------------------------------------------------------
+# Ruff
+# ---------------------------------------------------------------------------
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+src = ["src"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["pytableau"]
+
+# ---------------------------------------------------------------------------
+# Mypy
+# ---------------------------------------------------------------------------
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+mypy_path = "src"
+packages = ["pytableau"]
+
+[[tool.mypy.overrides]]
+module = ["tableauhyperapi.*", "pantab.*", "tableauserverclient.*"]
+ignore_missing_imports = true
+
+# ---------------------------------------------------------------------------
+# Pytest
+# ---------------------------------------------------------------------------
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--tb=short -q"
+
+# ---------------------------------------------------------------------------
+# Coverage
+# ---------------------------------------------------------------------------
+[tool.coverage.run]
+source = ["pytableau"]
+branch = true
+
+[tool.coverage.report]
+show_missing = true
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
