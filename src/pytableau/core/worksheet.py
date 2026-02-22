@@ -24,7 +24,8 @@ from .filters import (
     TopNFilter,
     parse_filter_node,
 )
-from .fields import FieldReference, _normalise_field_name
+from .datasource import _normalise_field_name
+from .fields import FieldReference
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
@@ -118,6 +119,109 @@ class Worksheet(XMLNodeProxy):
         if mark_node is not None:
             return mark_node.get("class", "")
         return ""
+
+    def _get_shelf_lists(self, shelf: str) -> list[FieldReference] | list[FieldReference] | None:
+        if shelf == "rows":
+            return self._rows
+        if shelf == "cols":
+            return self._cols
+        if shelf == "color":
+            return self.marks.color
+        if shelf == "size":
+            return self.marks.size
+        if shelf == "detail":
+            return self.marks.detail
+        if shelf == "tooltip":
+            return self.marks.tooltip
+        if shelf == "label":
+            return self.marks.label
+        return None
+
+    def add_to_shelf(
+        self,
+        shelf: str,
+        field: str,
+        *,
+        index: int | None = None,
+    ) -> None:
+        """Append ``field`` to a shelf or mark channel."""
+        shelf_key = _normalize_ref(shelf)
+        targets = self._get_shelf_lists(shelf_key)
+        if targets is None:
+            raise ValueError(f"Unsupported shelf '{shelf}'")
+
+        ref = FieldReference(field)
+        normalized = _normalise_field_name(ref.name)
+        ref = FieldReference(normalized)
+        if any(_normalise_field_name(f.name) == normalized for f in targets):
+            return
+
+        if index is None or index >= len(targets):
+            targets.append(ref)
+        else:
+            if index < 0:
+                index = 0
+            targets.insert(index, ref)
+
+        if shelf_key in {"rows", "cols"}:
+            if shelf_key == "rows":
+                self.rows = targets
+            else:
+                self.cols = targets
+            return
+
+        self._write_mark_text(shelf_key, targets)
+
+    def remove_from_shelf(self, shelf: str, field: str) -> int:
+        """Remove ``field`` from a shelf or mark channel."""
+        shelf_key = _normalise_field_name(shelf)
+        targets = self._get_shelf_lists(shelf_key)
+        if targets is None:
+            raise ValueError(f"Unsupported shelf '{shelf}'")
+        target_key = _normalise_field_name(field)
+        removed = [ref for ref in targets if _normalise_field_name(ref.name) == target_key]
+        if not removed:
+            return 0
+
+        kept = [ref for ref in targets if _normalise_field_name(ref.name) != target_key]
+        if shelf_key in {"rows", "cols"}:
+            if shelf_key == "rows":
+                self.rows = kept
+            else:
+                self.cols = kept
+        else:
+            self._write_mark_text(shelf_key, kept)
+            if shelf_key in {"color", "size", "detail", "tooltip", "label"}:
+                setattr(self.marks, shelf_key, kept)
+        return len(removed)
+
+    def move_within_shelf(self, shelf: str, field: str, index: int) -> None:
+        """Reorder a field inside a shelf or mark channel."""
+        shelf_key = _normalise_field_name(shelf)
+        targets = self._get_shelf_lists(shelf_key)
+        if targets is None:
+            raise ValueError(f"Unsupported shelf '{shelf}'")
+        target_key = _normalise_field_name(field)
+        for i, ref in enumerate(targets):
+            if _normalise_field_name(ref.name) == target_key:
+                item = targets.pop(i)
+                break
+        else:
+            raise FieldNotFoundError(f"Field '{field}' not present in shelf '{shelf}'.")
+
+        index = max(0, min(index, len(targets)))
+        targets.insert(index, item)
+        if shelf_key in {"rows", "cols"}:
+            if shelf_key == "rows":
+                self.rows = targets
+            else:
+                self.cols = targets
+            return
+        self._write_mark_text(shelf_key, targets)
+
+    def add_filter_to_shelf(self, shelf: str, field: str) -> None:
+        """Deprecated convenience for compatibility."""
+        self.add_to_shelf(shelf, field)
 
     def _read_shelf(self, tag: str) -> list[FieldReference]:
         node = self.xml_node.find(tag)

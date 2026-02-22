@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING
 from lxml import etree
 
 from pytableau.constants import ActionType, DashboardSizeType
-from pytableau.core.fields import _normalise_field_name
+from pytableau.core.datasource import _normalise_field_name
 from pytableau.xml.proxy import XMLNodeProxy
 
 if TYPE_CHECKING:
@@ -138,6 +138,147 @@ class Dashboard(XMLNodeProxy):
                 )
             )
         return out
+
+    def _ensure_actions_node(self) -> etree._Element:
+        actions = self.xml_node.find("actions")
+        if actions is None:
+            actions = etree.SubElement(self.xml_node, "actions")
+        return actions
+
+    def _append_action(self, action_type: str, name: str, field: str | None = None) -> Action:
+        actions = self._ensure_actions_node()
+        payload = {"type": action_type, "name": name}
+        if field is not None:
+            payload["field"] = field
+        action_node = etree.SubElement(actions, "action", attrib=payload)
+        self.actions = self._read_actions()
+        action = self.actions[-1]
+        return action
+
+    def add_filter_action(
+        self,
+        name: str,
+        *,
+        field: str,
+        source_sheet: str | None = None,
+        target_sheet: str | None = None,
+    ) -> Action:
+        action_node = self._append_action(ActionType.FILTER.value, name, field=f"[{field}]")
+        if source_sheet:
+            action_node.xml_node.set("source-sheet", source_sheet)
+        if target_sheet:
+            action_node.xml_node.set("target-sheet", target_sheet)
+        return action_node
+
+    def add_highlight_action(
+        self,
+        name: str,
+        *,
+        field: str,
+        source_sheet: str | None = None,
+        target_sheet: str | None = None,
+    ) -> Action:
+        action_node = self._append_action(ActionType.HIGHLIGHT.value, name, field=f"[{field}]")
+        if source_sheet:
+            action_node.xml_node.set("source-sheet", source_sheet)
+        if target_sheet:
+            action_node.xml_node.set("target-sheet", target_sheet)
+        return action_node
+
+    def add_url_action(self, name: str, url: str, *, source_sheet: str | None = None) -> Action:
+        action_node = self._append_action(ActionType.URL.value, name)
+        action_node.xml_node.set("url", url)
+        if source_sheet:
+            action_node.xml_node.set("source-sheet", source_sheet)
+        return action_node
+
+    def remove_action(self, name: str) -> int:
+        removed = 0
+        target = self.xml_node.find("actions")
+        if target is None:
+            return 0
+        for action in list(target.findall("action")):
+            if action.get("name") == name:
+                target.remove(action)
+                removed += 1
+        if removed:
+            self.actions = self._read_actions()
+        return removed
+
+    def add_zone(
+        self,
+        zone_type: str,
+        name: str,
+        *,
+        x: int | float | None = None,
+        y: int | float | None = None,
+        w: int | float | None = None,
+        h: int | float | None = None,
+        parent_name: str | None = None,
+    ) -> Zone:
+        attrs = {
+            "type": zone_type,
+            "name": name,
+        }
+        if x is not None:
+            attrs["x"] = str(x)
+        if y is not None:
+            attrs["y"] = str(y)
+        if w is not None:
+            attrs["w"] = str(w)
+        if h is not None:
+            attrs["h"] = str(h)
+
+        parent = None
+        if parent_name is not None:
+            for candidate in self.xml_node.findall(".//zone"):
+                if candidate.get("name") == parent_name:
+                    parent = candidate
+                    break
+        if parent is None:
+            parent = self.xml_node
+        zone_node = etree.SubElement(parent, "zone", attrib=attrs)
+        self.zones = self._read_zones()
+        return Zone(
+            zone_type=zone_type,
+            name=name,
+            x=x,
+            y=y,
+            w=w,
+            h=h,
+            children=[],
+        )
+
+    def remove_zone(self, name: str) -> int:
+        removed = 0
+        for node in list(self.xml_node.findall(".//zone")):
+            if node.get("name") == name:
+                parent = node.getparent()
+                if parent is not None:
+                    parent.remove(node)
+                removed += 1
+        if removed:
+            self.zones = self._read_zones()
+        return removed
+
+    def move_zone(
+        self,
+        name: str,
+        *,
+        x: int | float | None = None,
+        y: int | float | None = None,
+    ) -> int:
+        count = 0
+        for node in self.xml_node.findall(".//zone"):
+            if node.get("name") == name:
+                if x is not None:
+                    node.set("x", str(x))
+                if y is not None:
+                    node.set("y", str(y))
+                count += 1
+        if count:
+            self.zones = self._read_zones()
+        return count
 
     def replace_field_reference(self, old: str, new: str) -> None:
         old_norm = _normalise_field_name(old)

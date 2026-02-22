@@ -1,0 +1,29 @@
+<workbook source-build="20241.24.0312.0830" source-platform="pytableau-template">
+  <datasources>
+    <datasource name="__PLACEHOLDER_DS__" caption="__PLACEHOLDER_DS__">
+      <connection class="hyper" dbname="__PLACEHOLDER_DS__.hyper"/>
+      <columns>
+        <column name="__CATEGORY__" caption="__CATEGORY__" datatype="string" role="dimension"/>
+        <column name="__MEASURE__" caption="__MEASURE__" datatype="real" role="measure"/>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="__WORKSHEET__">
+      <rows>[__CATEGORY__]</rows>
+      <cols>[__MEASURE__]</cols>
+      <marks>
+        <color>[__CATEGORY__]</color>
+        <size>[__MEASURE__]</size>
+      </marks>
+      <datasource-dependencies>
+        <datasource name="__PLACEHOLDER_DS__"/>
+      </datasource-dependencies>
+    </worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name="__DASHBOARD__">
+      <size type="automatic" width="1200" height="800"/>
+    </dashboard>
+  </dashboards>
+</workbook>

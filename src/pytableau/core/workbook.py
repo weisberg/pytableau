@@ -20,6 +20,8 @@ from pytableau.inspect.lineage import FieldLineage
 from pytableau.inspect.report import WorkbookReport
 from pytableau.package.manager import PackageManager
 from pytableau.xml.engine import XMLSchemaEngine
+from pytableau.templates.engine import TemplateEngine
+from pytableau.templates.library import get_template_path
 
 from .dashboard import Dashboard, DashboardCollection
 from .datasource import Datasource, DatasourceCollection
@@ -62,6 +64,7 @@ class Workbook:
         self.worksheets: WorksheetCollection = WorksheetCollection([])
         self.dashboards: DashboardCollection = DashboardCollection([])
         self.parameters: Datasource | None = None
+        self._template_engine: TemplateEngine | None = None
 
     @property
     def version(self) -> str:
@@ -140,7 +143,77 @@ class Workbook:
     @classmethod
     def from_template(cls, template: str | Path, **kwargs: object) -> "Workbook":
         """Construct a workbook from a built-in or custom template."""
-        raise NotImplementedError("Workbook.from_template() is implemented in Phase 4")
+        template_path = Path(template).expanduser() if isinstance(template, Path) else Path(str(template))
+        if not template_path.suffix:
+            template_path = get_template_path(str(template))
+        elif template_path.suffix.lower() != ".twb":
+            raise InvalidWorkbookError("Template path must point to a .twb file")
+
+        if not template_path.exists():
+            raise FileNotFoundError(f"Template not found: {template_path}")
+
+        try:
+            tree = etree.parse(str(template_path))
+        except (OSError, etree.XMLSyntaxError) as exc:
+            raise InvalidWorkbookError(f"Unable to parse template workbook: {template_path}") from exc
+
+        wb = cls()
+        wb._load_tree(tree)
+        wb._template_engine = TemplateEngine(tree)
+        if kwargs:
+            wb._template_engine.map_fields(
+                {str(k): str(v) for k, v in kwargs.items()},
+                strict=False,
+            )
+        return wb
+
+    @property
+    def template(self) -> TemplateEngine:
+        if self._template_engine is None:
+            self._template_engine = TemplateEngine(self._tree)
+        return self._template_engine
+
+    def migrate_version(self, version: str) -> None:
+        """Update workbook metadata for a different Tableau version."""
+        source_build = TABLEAU_VERSION_MAP.get(version)
+        if source_build is None:
+            raise ValueError(f"Unsupported Tableau version: {version}")
+        self._version = version
+        self.xml_root.set("source-build", source_build)
+
+    def merge(self, other: "Workbook", *, conflict_suffix: str = " (imported)") -> None:
+        """Merge datasource, worksheet, and dashboard nodes from another workbook."""
+        if not isinstance(other, Workbook):
+            raise TypeError("Workbook.merge() accepts only Workbook instances")
+        self._merge_collection(self.xml_root, other.xml_root, "datasource")
+        self._merge_collection(self.xml_root, other.xml_root, "worksheet")
+        self._merge_collection(self.xml_root, other.xml_root, "dashboard")
+        self._load_tree(self.xml_tree)
+
+    def _merge_collection(
+        self,
+        target_root: etree._Element,
+        source_root: etree._Element,
+        tag: str,
+        *,
+        container_name: str | None = None,
+        key_attr: str = "name",
+        conflict_suffix: str = " (imported)",
+    ) -> None:
+        source_container = source_root.find(f"{container_name or tag}s")
+        if source_container is None:
+            return
+        target_container = target_root.find(f"{container_name or tag}s")
+        if target_container is None:
+            target_container = etree.SubElement(target_root, f"{container_name or tag}s")
+
+        existing_names = {node.get(key_attr, "") for node in target_container.findall(tag)}
+        for node in source_container.findall(tag):
+            clone = etree.fromstring(etree.tostring(node))
+            name = node.get(key_attr)
+            if name is not None and name in existing_names:
+                clone.set(key_attr, f"{name}{conflict_suffix}")
+            target_container.append(clone)
 
     def catalog(self) -> WorkbookCatalog:
         """Collect metadata and field references for read-only inspection."""
@@ -232,6 +305,34 @@ class Workbook:
                 zf.write(work_twb, work_twb.name)
 
         self._path = destination
+
+    def publish(self, server: str, project: str, **auth: object) -> None:
+        """Publish this workbook to Tableau Server or Cloud."""
+        from pytableau.server.client import ServerClient
+
+        if self._path is None:
+            with TemporaryDirectory(prefix="pytableau-") as temp_dir:
+                publish_path = Path(temp_dir) / "workbook.twbx"
+                self.save_as(publish_path)
+                with ServerClient(server, **auth) as client:
+                    client.publish_workbook(publish_path, project_id=project)
+                return
+
+        with TemporaryDirectory(prefix="pytableau-") as temp_dir:
+            publish_path = Path(temp_dir) / "workbook.twbx"
+            self.save_as(publish_path)
+            with ServerClient(server, **auth) as client:
+                client.publish_workbook(publish_path, project_id=project)
+
+    def download(self, server: str, workbook_id: str, **auth: object) -> "Workbook":
+        """Download a workbook from Tableau Server or Cloud and return it as a Workbook."""
+        from pytableau.server.client import ServerClient
+
+        with TemporaryDirectory(prefix="pytableau-") as temp_dir:
+            downloaded = Path(temp_dir) / f"{workbook_id}.twb"
+            with ServerClient(server, **auth) as client:
+                client.download_workbook(workbook_id, destination=downloaded)
+            return self.__class__.open(downloaded)
 
     def __del__(self) -> None:
         self.close()

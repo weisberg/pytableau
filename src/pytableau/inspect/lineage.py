@@ -10,7 +10,7 @@ import re
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
-from pytableau.core.fields import _normalise_field_name
+from pytableau.core.datasource import _normalise_field_name
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook

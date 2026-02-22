@@ -49,6 +49,7 @@ Repository = "https://github.com/brianlwb/pytableau"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/pytableau"]
+include = ["src/pytableau/**/*.twb"]
 
 # ---------------------------------------------------------------------------
 # Ruff
