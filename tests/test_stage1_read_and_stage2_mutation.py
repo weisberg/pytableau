@@ -9,6 +9,7 @@ from pytableau.constants import FilterType
 from pytableau.core.fields import FieldReference
 from pytableau.core.filters import CategoricalFilter
 from pytableau.core.workbook import Workbook
+from pytableau.inspect import LineageField
 
 
 def _write_sample_twb(path: Path) -> None:
@@ -221,3 +222,181 @@ def test_datasource_mutations_propagate(tmp_path: Path) -> None:
     assert not any(ref.name == "Territory" for ref in worksheet.marks.color)
     assert not any(ref.name == "Territory" for ref in worksheet.marks.detail)
     assert dashboard.actions[0].fields == []
+
+
+def _write_lineage_twb(path: Path) -> None:
+    workbook = etree.Element(
+        "workbook",
+        attrib={
+            "source-build": "20241.24.0312.0830",
+            "source-platform": "test",
+        },
+    )
+
+    datasources = etree.SubElement(workbook, "datasources")
+    datasource = etree.SubElement(
+        datasources,
+        "datasource",
+        attrib={
+            "name": "Sales",
+            "caption": "Sales Data",
+        },
+    )
+    etree.SubElement(
+        datasource,
+        "connection",
+        attrib={
+            "class": "sqlserver",
+            "server": "localhost",
+            "dbname": "analytics",
+        },
+    )
+    columns = etree.SubElement(datasource, "columns")
+    etree.SubElement(
+        columns,
+        "column",
+        attrib={"name": "sales_id", "caption": "Sales ID", "datatype": "integer", "role": "dimension"},
+    )
+    etree.SubElement(
+        columns,
+        "column",
+        attrib={"name": "cost", "caption": "Cost", "datatype": "real", "role": "dimension"},
+    )
+    etree.SubElement(
+        columns,
+        "column",
+        attrib={"name": "revenue", "caption": "Revenue", "datatype": "real", "role": "measure"},
+    )
+    base = etree.SubElement(
+        columns,
+        "column",
+        attrib={"name": "gross", "caption": "Gross Profit", "datatype": "real", "role": "measure"},
+    )
+    etree.SubElement(base, "calculation", attrib={"class": "tableau", "formula": "[Sales].[Revenue] - [Cost]"})
+    derived = etree.SubElement(
+        columns,
+        "column",
+        attrib={"name": "margin", "caption": "Margin", "datatype": "real", "role": "measure"},
+    )
+    etree.SubElement(derived, "calculation", attrib={"class": "tableau", "formula": "[Gross Profit] / [Cost]"})
+
+    worksheets = etree.SubElement(workbook, "worksheets")
+    etree.SubElement(worksheets, "worksheet", name="Overview")
+
+    dashboards = etree.SubElement(workbook, "dashboards")
+    etree.SubElement(dashboards, "dashboard", name="Dashboard")
+
+    path.write_text(
+        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8"),
+        encoding="utf-8",
+    )
+
+
+def test_field_lineage_reports_calculated_dependencies(tmp_path: Path) -> None:
+    path = tmp_path / "lineage.twb"
+    _write_lineage_twb(path)
+
+    workbook = Workbook.open(path)
+    lineage = workbook.lineage()
+
+    gross = lineage.for_field("Gross Profit", datasource="Sales")
+    assert gross is not None
+    assert gross.depends_on == [
+        # Parsed dependencies preserve datasource-qualified and local field references.
+        LineageField(datasource="Sales", field="Revenue"),
+        LineageField(datasource=None, field="Cost"),
+    ]
+
+    margin = lineage.for_field("Margin", datasource="Sales")
+    assert margin is not None
+    assert margin.depends_on == [
+        LineageField(datasource=None, field="Gross Profit"),
+        LineageField(datasource=None, field="Cost"),
+    ]
+    assert lineage.to_dict()["Sales::Margin"] == ["[Gross Profit]", "[Cost]"]
+
+
+def test_workbook_report_generates_markdown(tmp_path: Path) -> None:
+    path = tmp_path / "lineage.twb"
+    _write_sample_twb(path)
+    workbook = Workbook.open(path)
+
+    markdown = workbook.report().to_markdown()
+    assert "# Workbook Report" in markdown
+    assert "## Datasources" in markdown
+    assert "Sales" in markdown
+    assert "## Calculated Field Lineage" in markdown
+    assert "Sales::Margin" in markdown
+
+
+def test_roundtrip_after_mutations(tmp_path: Path) -> None:
+    path = tmp_path / "sample.twb"
+    _write_sample_twb(path)
+    workbook = Workbook.open(path)
+
+    sales = workbook.datasources["Sales"]
+    sales.rename_field("Region", "Territory")
+    output = tmp_path / "renamed.twb"
+    workbook.save_as(output)
+
+    reopened = Workbook.open(output)
+    assert reopened.version == "2024.1"
+    assert reopened.worksheets["Overview"].rows[1] == FieldReference("Territory")
+    assert reopened.datasources["Sales"].get_field("Territory") is not None
+
+
+def test_connection_mutation(tmp_path: Path) -> None:
+    path = tmp_path / "sample.twb"
+    _write_sample_twb(path)
+
+    workbook = Workbook.open(path)
+    sales = workbook.datasources["Sales"]
+
+    sales.swap_connection(
+        server="analytics.internal",
+        dbname="analytics_reporting",
+        username="ci-bot",
+        port=55443,
+        class_="postgres",
+    )
+
+    connection = sales.connections[0]
+    assert connection.server == "analytics.internal"
+    assert connection.dbname == "analytics_reporting"
+    assert connection.username == "ci-bot"
+    assert connection.port == 55443
+    assert connection.class_ == "postgres"
+
+
+def test_parameter_mutation(tmp_path: Path) -> None:
+    path = tmp_path / "sample.twb"
+    _write_sample_twb(path)
+
+    workbook = Workbook.open(path)
+    params = workbook.parameters
+    assert params is not None
+    threshold = params.parameters[0]
+
+    threshold.value = 20
+    assert threshold.value == 20
+    threshold.domain_type = "list"
+    threshold.allowable_values = ["10", "20", "30"]
+    assert threshold.allowable_values == ["10", "20", "30"]
+
+
+def test_add_calculated_field(tmp_path: Path) -> None:
+    path = tmp_path / "sample.twb"
+    _write_sample_twb(path)
+
+    workbook = Workbook.open(path)
+    sales = workbook.datasources["Sales"]
+    created = sales.add_calculated_field(
+        caption="Sales Minus Cost",
+        formula="[Sales] / [Cost]",
+        datatype="real",
+        role="measure",
+    )
+
+    assert created.caption == "Sales Minus Cost"
+    assert any(field.caption == "Sales Minus Cost" for field in sales.calculated_fields)
+    assert len(sales.calculated_fields) == 2

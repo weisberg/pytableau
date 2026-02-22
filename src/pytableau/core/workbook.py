@@ -16,6 +16,8 @@ from pytableau.exceptions import (
     SchemaValidationError,
 )
 from pytableau.inspect.catalog import WorkbookCatalog
+from pytableau.inspect.lineage import FieldLineage
+from pytableau.inspect.report import WorkbookReport
 from pytableau.package.manager import PackageManager
 from pytableau.xml.engine import XMLSchemaEngine
 
@@ -143,6 +145,14 @@ class Workbook:
     def catalog(self) -> WorkbookCatalog:
         """Collect metadata and field references for read-only inspection."""
         return WorkbookCatalog(self)
+
+    def lineage(self) -> FieldLineage:
+        """Build a calculated-field dependency graph."""
+        return FieldLineage(self)
+
+    def report(self) -> WorkbookReport:
+        """Generate documentation content for the workbook."""
+        return WorkbookReport(self)
 
     def _load_tree(self, tree: etree._ElementTree) -> None:
         self._tree = tree
