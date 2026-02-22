@@ -1,0 +1,31 @@
+site_name: pytableau
+site_description: Python SDK for programmatic Tableau workbook engineering
+site_url: https://weisberg.github.io/pytableau/
+repo_url: https://github.com/weisberg/pytableau
+
+theme:
+  name: readthedocs
+
+plugins:
+  - search
+  - mkdocstrings:
+      default_handler: python
+      handlers:
+        python:
+          options:
+            show_root_heading: true
+            show_signature: true
+            docstring_style: google
+            show_source: true
+
+nav:
+  - Home: index.md
+  - Quickstart: quickstart.md
+  - API:
+      - Overview: api/index.md
+  - Cookbook:
+      - Recipes: cookbook/index.md
+
+markdown_extensions:
+  - admonition
+  - attr_list
