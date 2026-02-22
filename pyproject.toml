@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pytableau"
-version = "0.1.0"
+version = "0.4.0"
 description = "The unified Python SDK for Tableau workbook engineering"
 readme = "README.md"
 license = { text = "MIT" }
@@ -25,10 +25,11 @@ classifiers = [
 dependencies = ["lxml>=4.9"]
 
 [project.optional-dependencies]
-hyper = ["tableauhyperapi>=0.0.19", "pantab>=5.0"]
+cli    = ["tooli>=6.6.0"]
+hyper  = ["tableauhyperapi>=0.0.19", "pantab>=5.0"]
 pandas = ["pandas>=2.0"]
 server = ["tableauserverclient>=0.30"]
-all = ["pytableau[hyper,pandas,server]"]
+all    = ["pytableau[cli,hyper,pandas,server]"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -36,7 +37,7 @@ dev = [
     "ruff>=0.3",
     "pre-commit>=3.0",
     "lxml-stubs",
-    "click>=8.0",
+    "tooli>=6.6.0",
 ]
 
 [project.scripts]
@@ -106,3 +107,6 @@ exclude_lines = [
     "raise NotImplementedError",
     "if TYPE_CHECKING:",
 ]
+
+[tool.uv.sources]
+tooli = { path = "../tooli" }

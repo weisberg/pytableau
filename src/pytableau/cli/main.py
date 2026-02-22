@@ -1,41 +1,90 @@
-"""CLI entry point: ``pytableau inspect``, ``pytableau diff``, ``pytableau swap``.
+"""CLI entry point for pytableau — powered by tooli.
 
-The CLI is built with `click <https://click.palletsprojects.com/>`_.
+Exposes the full pytableau API as a rich, agent-ready command suite with
+automatic JSON output, MCP tools, JSON Schema, structured errors with
+recovery guidance, and dry-run planning.
 
-.. note::
-    Full implementation is tracked in Phase 1 of the development plan.
-    Phase 0 ships a minimal skeleton so that the ``pytableau`` console
-    script entry point is importable.
+Install the CLI extra to use:
+    pip install "pytableau[cli]"
 """
 
 from __future__ import annotations
 
-import json
+from pathlib import Path
+from typing import Annotated
 
-try:
-    import click
-except ImportError as exc:
-    raise ImportError(
-        "The pytableau CLI requires 'click'. "
-        "Install it with: pip install click"
-    ) from exc
+from tooli import Argument, Option, Tooli, dry_run_support, record_dry_action
+from tooli.annotations import Destructive, Idempotent, ReadOnly
+from tooli.errors import (
+    AuthError,
+    InputError,
+    InternalError,
+    StateError,
+    ToolError,
+    ToolRuntimeError,
+)
 
-from pytableau.core.workbook import Workbook
+from pytableau.exceptions import (
+    AuthenticationError,
+    CorruptWorkbookError,
+    DatasourceNotFoundError,
+    DuplicateFieldError,
+    FieldNotFoundError,
+    HyperError,
+    InvalidWorkbookError,
+    PyTableauError,
+    SchemaValidationError,
+    ServerError,
+    UnmappedPlaceholderError,
+)
+
+app = Tooli(
+    name="pytableau",
+    description="The unified Python SDK for Tableau workbook engineering.",
+    version="0.4.0",
+)
 
 
-@click.group()
-@click.version_option(package_name="pytableau")
-def app() -> None:
-    """pytableau — The unified Python SDK for Tableau workbook engineering."""
+def _map_error(exc: PyTableauError) -> ToolError:
+    """Map a pytableau exception to the appropriate tooli structured error."""
+    if isinstance(
+        exc,
+        (
+            InvalidWorkbookError,
+            CorruptWorkbookError,
+            FieldNotFoundError,
+            DuplicateFieldError,
+            UnmappedPlaceholderError,
+        ),
+    ):
+        return InputError(str(exc))
+    if isinstance(exc, AuthenticationError):
+        return AuthError(str(exc))
+    if isinstance(exc, (DatasourceNotFoundError, SchemaValidationError)):
+        return StateError(str(exc))
+    if isinstance(exc, (ServerError, HyperError)):
+        return ToolRuntimeError(str(exc))
+    return InternalError(str(exc))
 
 
-@app.command()
-@click.argument("workbook", type=click.Path(exists=True))
-@click.option("--format", "fmt", default="table", type=click.Choice(["table", "json"]))
-def inspect(workbook: str, fmt: str) -> None:
-    """Inspect a Tableau workbook and print its contents."""
-    wb = Workbook.open(workbook)
-    payload = {
+# ---------------------------------------------------------------------------
+# Inspection group (ReadOnly | Idempotent)
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def inspect(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> dict:
+    """Inspect a Tableau workbook and return structured metadata."""
+    from pytableau.core.workbook import Workbook
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
         "path": str(workbook),
         "version": wb.version,
         "source_platform": wb.source_platform,
@@ -47,91 +96,421 @@ def inspect(workbook: str, fmt: str) -> None:
         "dashboards": wb.dashboards.names,
     }
 
-    if fmt == "json":
-        click.echo(json.dumps(payload, indent=2, sort_keys=True))
-        return
 
-    click.echo(f"Workbook: {workbook}")
-    click.echo(f"Version: {wb.version}")
-    if wb.source_platform:
-        click.echo(f"Source platform: {wb.source_platform}")
-    click.echo(f"Datasources ({payload['datasource_count']}):")
-    for name in payload["datasources"]:
-        click.echo(f"  - {name}")
-    click.echo(f"Worksheets ({payload['worksheet_count']}):")
-    for name in payload["worksheets"]:
-        click.echo(f"  - {name}")
-    click.echo(f"Dashboards ({payload['dashboard_count']}):")
-    for name in payload["dashboards"]:
-        click.echo(f"  - {name}")
+@app.command(annotations=ReadOnly | Idempotent)
+def validate(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> dict:
+    """Validate workbook XML. Returns list of issues."""
+    from pytableau.core.workbook import Workbook
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    issues = wb.validate()
+    return {
+        "path": str(workbook),
+        "issue_count": len(issues),
+        "issues": [
+            {"level": i.level, "message": i.message, "path": i.path} for i in issues
+        ],
+    }
 
 
-@app.command()
-@click.argument("before", type=click.Path(exists=True))
-@click.argument("after", type=click.Path(exists=True))
-def diff(before: str, after: str) -> None:
+@app.command(annotations=ReadOnly)
+def diff(
+    before: Annotated[Path, Argument(help="Path to base .twb or .twbx")],
+    after: Annotated[Path, Argument(help="Path to changed .twb or .twbx")],
+) -> dict:
     """Show semantic differences between two Tableau workbooks."""
-    before_wb = Workbook.open(before)
-    after_wb = Workbook.open(after)
+    from pytableau.core.workbook import Workbook
 
-    before_xml = before_wb.to_xml_string().splitlines()
-    after_xml = after_wb.to_xml_string().splitlines()
+    try:
+        before_wb = Workbook.open(before)
+        after_wb = Workbook.open(after)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
 
-    if before_xml == after_xml:
-        click.echo("No differences detected.")
-        return
+    before_lines = set(before_wb.to_xml_string().splitlines())
+    after_lines = set(after_wb.to_xml_string().splitlines())
+    added = sorted(after_lines - before_lines)
+    removed = sorted(before_lines - after_lines)
 
-    before_set = {line for line in before_xml}
-    after_set = {line for line in after_xml}
-    added = sorted(after_set - before_set)
-    removed = sorted(before_set - after_set)
-
-    click.echo(f"Added lines: {len(added)}")
-    for item in added[:40]:
-        click.echo(f"  + {item}")
-    if len(added) > 40:
-        click.echo(f"  ... ({len(added) - 40} more)")
-
-    click.echo(f"Removed lines: {len(removed)}")
-    for item in removed[:40]:
-        click.echo(f"  - {item}")
-    if len(removed) > 40:
-        click.echo(f"  ... ({len(removed) - 40} more)")
+    return {
+        "before": str(before),
+        "after": str(after),
+        "added_count": len(added),
+        "removed_count": len(removed),
+        "added": added,
+        "removed": removed,
+    }
 
 
-@app.command()
-@click.argument("workbook", type=click.Path(exists=True))
-@click.option("--server", required=True, help="New database server hostname")
-@click.option("--db", required=False, help="New database name")
-@click.option("--username", required=False, help="New database username")
-@click.option("--output", "-o", required=False, help="Output path (default: overwrite)")
-def swap(
-    workbook: str,
-    server: str,
-    db: str | None,
-    username: str | None,
-    output: str | None,
-) -> None:
+@app.command(annotations=ReadOnly | Idempotent, paginated=True)
+def catalog(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> list[dict]:
+    """List all datasources, fields, calculated fields, and connections."""
+    from pytableau.core.workbook import Workbook
+    from pytableau.inspect.catalog import WorkbookCatalog
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    cat = WorkbookCatalog(wb)
+    data = cat.to_dict()
+    return data["datasources"]
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def lineage(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> dict:
+    """Show calculated-field dependency graph."""
+    from pytableau.core.workbook import Workbook
+    from pytableau.inspect.lineage import FieldLineage
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    graph = FieldLineage(wb)
+    return graph.to_dict()
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def report(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    output: Annotated[
+        Path | None, Option(help="Write markdown to this file path")
+    ] = None,
+) -> dict:
+    """Generate markdown documentation for the workbook."""
+    from pytableau.core.workbook import Workbook
+    from pytableau.inspect.report import WorkbookReport
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    rpt = WorkbookReport(wb)
+    markdown = rpt.to_markdown()
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(markdown, encoding="utf-8")
+
+    return {
+        "path": str(workbook),
+        "markdown": markdown,
+        "output_path": str(output) if output else None,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Mutation group (Destructive, with dry-run where safe)
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=Destructive | Idempotent, supports_dry_run=True)
+@dry_run_support
+def swap_connection(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    server: Annotated[str, Option(help="New database server hostname")],
+    db: Annotated[str | None, Option(help="New database name")] = None,
+    username: Annotated[str | None, Option(help="New database username")] = None,
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
     """Swap connection properties in a Tableau workbook."""
-    wb = Workbook.open(workbook)
-    updated = 0
+    from pytableau.core.workbook import Workbook
 
+    destination = output or workbook
+    record_dry_action("swap_connection", str(workbook), details={"server": server, "db": db, "output": str(destination)})
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    updated = 0
     for conn in wb.xml_tree.findall(".//connection"):
-        if server:
-            conn.set("server", server)
-            updated += 1
-        if db:
+        conn.set("server", server)
+        updated += 1
+        if db is not None:
             if "dbname" in conn.attrib:
                 conn.set("dbname", db)
             elif "dbName" in conn.attrib:
                 conn.set("dbName", db)
             else:
                 conn.set("dbname", db)
-            updated += 1
-        if username:
+        if username is not None:
             conn.set("username", username)
-            updated += 1
+
+    try:
+        wb.save_as(destination)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "connections_updated": updated,
+        "server": server,
+        "db": db,
+        "username": username,
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def rename_field(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    old_name: Annotated[str, Option(help="Current field name")],
+    new_name: Annotated[str, Option(help="New field name")],
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
+    """Rename a field and cascade across all worksheets/dashboards."""
+    from pytableau.core.workbook import Workbook
 
     destination = output or workbook
-    wb.save_as(destination)
-    click.echo(f"Updated {updated} connection attributes.")
+    record_dry_action(
+        "rename_field",
+        str(workbook),
+        details={"old_name": old_name, "new_name": new_name, "output": str(destination)},
+    )
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    # Cascade rename across all XML nodes that reference the field
+    root = wb.xml_root
+    renamed_count = 0
+    for node in root.iter():
+        for attr in ("name", "field", "column"):
+            if node.get(attr) == f"[{old_name}]":
+                node.set(attr, f"[{new_name}]")
+                renamed_count += 1
+            elif node.get(attr) == old_name:
+                node.set(attr, new_name)
+                renamed_count += 1
+
+    try:
+        wb.save_as(destination)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "old_name": old_name,
+        "new_name": new_name,
+        "references_updated": renamed_count,
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def version_migrate(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    target_version: Annotated[str, Option(help="Target Tableau version, e.g. 2024.1")],
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
+    """Migrate a workbook to a different Tableau version."""
+    from pytableau.core.workbook import Workbook
+
+    destination = output or workbook
+    record_dry_action(
+        "version_migrate",
+        str(workbook),
+        details={"target_version": target_version, "output": str(destination)},
+    )
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    original_version = wb.version
+    try:
+        wb.migrate_version(target_version)
+        wb.save_as(destination)
+    except ValueError as exc:
+        raise InputError(str(exc)) from exc
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "original_version": original_version,
+        "target_version": target_version,
+    }
+
+
+@app.command(annotations=Destructive)
+def merge(
+    base: Annotated[Path, Argument(help="Path to base .twb or .twbx")],
+    other: Annotated[Path, Argument(help="Path to workbook to merge in")],
+    output: Annotated[Path, Option("-o", help="Output path for merged workbook")],
+) -> dict:
+    """Merge sheets/dashboards from another workbook into base."""
+    from pytableau.core.workbook import Workbook
+
+    try:
+        base_wb = Workbook.open(base)
+        other_wb = Workbook.open(other)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    before_sheets = list(base_wb.worksheets.names)
+    before_dashboards = list(base_wb.dashboards.names)
+
+    try:
+        base_wb.merge(other_wb)
+        base_wb.save_as(output)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "base": str(base),
+        "other": str(other),
+        "output": str(output),
+        "worksheets_before": before_sheets,
+        "worksheets_after": list(base_wb.worksheets.names),
+        "dashboards_before": before_dashboards,
+        "dashboards_after": list(base_wb.dashboards.names),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Template group
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def template_list() -> list[dict]:
+    """List all built-in pytableau workbook templates."""
+    from pytableau.templates.library import BUILTIN_TEMPLATES
+
+    return [{"name": name} for name in sorted(BUILTIN_TEMPLATES)]
+
+
+@app.command(annotations=Idempotent)
+def template_apply(
+    template: Annotated[str, Argument(help="Template name or path to .twb file")],
+    output: Annotated[Path, Option("-o", help="Output path for the generated workbook")],
+    fields: Annotated[
+        list[str] | None, Option(help="KEY=VALUE field mappings")
+    ] = None,
+) -> dict:
+    """Apply a template with field mappings and write output workbook."""
+    from pytableau.core.workbook import Workbook
+    from pytableau.exceptions import TemplateError
+
+    field_map: dict[str, str] = {}
+    if fields:
+        for item in fields:
+            if "=" not in item:
+                raise InputError(f"Field mapping must be KEY=VALUE, got: {item!r}")
+            k, _, v = item.partition("=")
+            field_map[k.strip()] = v.strip()
+
+    try:
+        wb = Workbook.from_template(template, **field_map)
+        wb.save_as(output)
+    except TemplateError as exc:
+        raise InputError(str(exc)) from exc
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "template": template,
+        "output": str(output),
+        "fields_applied": field_map,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Server group
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=Destructive, requires_approval=True)
+def publish(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx to publish")],
+    server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
+    project: Annotated[str, Option(help="Target project name or ID")],
+    token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
+    token_secret: Annotated[
+        str | None, Option(help="Personal access token secret")
+    ] = None,
+) -> dict:
+    """Publish a workbook to Tableau Server or Tableau Cloud."""
+    from pytableau.core.workbook import Workbook
+
+    auth: dict[str, str] = {}
+    if token_name is not None:
+        auth["token_name"] = token_name
+    if token_secret is not None:
+        auth["token_secret"] = token_secret
+
+    try:
+        wb = Workbook.open(workbook)
+        wb.publish(server, project, **auth)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "server": server,
+        "project": project,
+        "status": "published",
+    }
+
+
+@app.command(annotations=ReadOnly)
+def download(
+    workbook_id: Annotated[str, Argument(help="Workbook ID on Tableau Server or Cloud")],
+    server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
+    output: Annotated[Path, Option("-o", help="Local path to save downloaded workbook")],
+    token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
+    token_secret: Annotated[
+        str | None, Option(help="Personal access token secret")
+    ] = None,
+) -> dict:
+    """Download a workbook from Tableau Server or Cloud."""
+    from pytableau.core.workbook import Workbook
+
+    auth: dict[str, str] = {}
+    if token_name is not None:
+        auth["token_name"] = token_name
+    if token_secret is not None:
+        auth["token_secret"] = token_secret
+
+    try:
+        _wb = Workbook.new()
+        downloaded = _wb.download(server, workbook_id, **auth)
+        downloaded.save_as(output)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook_id": workbook_id,
+        "server": server,
+        "output": str(output),
+        "status": "downloaded",
+    }
