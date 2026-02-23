@@ -294,17 +294,16 @@ def rename_field(
     except PyTableauError as exc:
         raise _map_error(exc) from exc
 
-    # Cascade rename across all XML nodes that reference the field
-    root = wb.xml_root
+    # Use Datasource.rename_field() which handles caption vs internal name
+    # and cascades formula + worksheet reference updates correctly.
     renamed_count = 0
-    for node in root.iter():
-        for attr in ("name", "field", "column"):
-            if node.get(attr) == f"[{old_name}]":
-                node.set(attr, f"[{new_name}]")
+    try:
+        for ds in wb.datasources:
+            if ds.get_field(old_name) is not None:
+                ds.rename_field(old_name, new_name)
                 renamed_count += 1
-            elif node.get(attr) == old_name:
-                node.set(attr, new_name)
-                renamed_count += 1
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
 
     try:
         wb.save_as(destination)
@@ -316,7 +315,7 @@ def rename_field(
         "output": str(destination),
         "old_name": old_name,
         "new_name": new_name,
-        "references_updated": renamed_count,
+        "datasources_updated": renamed_count,
     }
 
 
