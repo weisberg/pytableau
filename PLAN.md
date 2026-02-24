@@ -2,7 +2,7 @@
 
 ## The Unified Python SDK for Tableau Workbook Engineering
 
-**Version:** 0.4.1 (in progress)
+**Version:** 0.6.0 (released)
 **Author:** Brian
 **License:** MIT
 **Target PyPI name:** `pytableau`
@@ -61,19 +61,21 @@
 pytableau/
 ├── core/                        # Object model
 │   ├── workbook.py              # Workbook: top-level entry point
-│   ├── datasource.py            # Datasource, Connection, Relation
+│   ├── datasource.py            # Datasource, Connection, Relation, MetadataRecord, Hierarchy, Set
 │   ├── fields.py                # Field, CalculatedField, Parameter, Group, Set, Bin
 │   ├── worksheet.py             # Worksheet, Shelf, MarkCard, Encoding
-│   ├── dashboard.py             # Dashboard, Zone, Action, DashboardObject
+│   ├── dashboard.py             # Dashboard, Zone, Action, DeviceLayout
 │   ├── filters.py               # CategoricalFilter, RangeFilter, RelativeDateFilter
 │   └── formatting.py            # Style, ColorPalette, Font, Tooltip
 │
 ├── xml/                         # XML engine
-│   ├── engine.py                # XMLSchemaEngine: validation, version rules
+│   ├── engine.py                # XMLSchemaEngine: validation, version rules, unknown tag tracking
 │   ├── proxy.py                 # XMLNodeProxy: safe mutation base class
 │   ├── writer.py                # XML generation helpers
 │   ├── differ.py                # Structural diff between two .twb XML trees
-│   ├── canonical.py             # Deterministic serialization for diffs [NEW]
+│   ├── rules.py                 # ValidationProfile + 10 built-in Rule classes [v0.6.0]
+│   ├── fixers.py                # AutoFixer + 3 built-in fixers (bracket, credentials, whitespace) [v0.6.0]
+│   ├── canonical.py             # Deterministic serialization for diffs [PLANNED]
 │   ├── schemas/                 # Version-specific schema knowledge (v2022–v2025)
 │   └── discovery/               # Schema reverse-engineering (corpus, controlled diff)
 │
@@ -82,8 +84,9 @@ pytableau/
 │   ├── types.py                 # Type mapping: pandas ↔ Hyper ↔ Tableau XML
 │   └── extract.py               # Extract lifecycle (create, refresh, attach)
 │
-├── package/                     # .twbx/.tdsx packaging [EXTENDED]
-│   ├── manager.py               # PackageManager: transparent .twbx ↔ temp dir
+├── package/                     # .twbx/.tdsx packaging
+│   ├── manager.py               # PackageManager: transparent .twbx ↔ temp dir, asset listing, path guard
+│   ├── promotion.py             # PromotionConfig, EnvironmentSpec, PromotionChange [v0.6.0]
 │   └── assets.py                # Image, shape, and asset handling
 │
 ├── templates/                   # Template engine
@@ -94,31 +97,35 @@ pytableau/
 ├── server/                      # Tableau Server/Cloud integration
 │   ├── client.py                # ServerClient: wraps tableauserverclient
 │   ├── workflows.py             # High-level: publish, download, refresh, round-trip
-│   └── metadata.py              # Metadata API (GraphQL) [NEW]
+│   └── metadata.py              # Metadata API (GraphQL) [PLANNED]
 │
 ├── inspect/                     # Read-only analysis & reporting
-│   ├── catalog.py               # List all fields, calcs, connections
+│   ├── catalog.py               # Field catalog, unused/orphaned detection, SQL/connection audit
+│   ├── complexity.py            # ComplexityReport, grade A–F scoring [v0.6.0]
 │   ├── lineage.py               # Field lineage: calculated field dependency graph
 │   ├── report.py                # Generate markdown/HTML/PDF documentation
 │   └── diff.py                  # Semantic diff between two workbooks
 │
-├── calculations/                # Formula parser & linter [NEW]
+├── calculations/                # Formula parser & linter [PLANNED]
 │   ├── parser.py                # lark-parser grammar for Tableau expressions
 │   ├── ast.py                   # AST node definitions
 │   ├── linter.py                # Lint rules engine
 │   └── functions.py             # Tableau function registry (100+ functions)
 │
-├── governance/                  # Cross-workbook governance [NEW]
+├── governance/                  # Cross-workbook governance [PLANNED]
 │   ├── index.py                 # WorkbookIndex (SQLite store)
 │   ├── linter.py                # Configurable rules engine
 │   └── scanner.py               # Sensitive data / credential detection
 │
-├── testing/                     # pytest plugin [NEW]
+├── testing/                     # pytest plugin [PLANNED]
 │   ├── plugin.py                # pytest-tableau plugin
 │   └── assertions.py            # Workbook assertion helpers
 │
 ├── cli/                         # Agent-ready CLI (tooli-powered)
-│   └── main.py                  # 14 commands: inspect, validate, diff, catalog, ...
+│   └── main.py                  # 17 commands: inspect, validate, diff, catalog, lineage, report,
+│                                #   swap-connection, rename-field, version-migrate, merge,
+│                                #   template-list, template-apply, publish, download,
+│                                #   complexity, auto-fix, promote [v0.6.0]
 │
 ├── exceptions.py                # Custom exception hierarchy
 ├── constants.py                 # Enums: MarkType, DataType, Role, FilterType, etc.
@@ -172,66 +179,39 @@ pytableau (core)
   publish, download
 - MCP server, --json output, dry-run, structured errors, agent help
 
+### ✅ v0.5.0 + v0.6.0: Hardening & Extended Model (COMPLETE — v0.6.0)
+24 GitHub issues implemented across two milestone groups:
+
+**Security & Hardening (#57–#66):**
+- Hardened XML parser: `strict=`, `compatibility=` modes; entity/network resolution disabled
+- Credential scrubbing: `Datasource.scrub_credentials()`, `save_as(scrub_credentials=True)` default
+- Streaming mode: `Workbook.open(streaming=True)` with `LazyNotMaterializedError` sentinels
+- `AmbiguousWorkbookError` + `twb_hint=` for multi-TWB archives
+- `PackageManager`: `list_assets()`, `glob()`, `find()`, `data_dir`, `resolve()` path guard
+- Deterministic ZIP: epoch timestamps, sorted entries, stripped volatile metadata
+- `Datasource.open/save/save_as` for standalone `.tds` / `.tdsx` files
+- 6 golden fixture `.twb` files + `canonicalize_twb()` round-trip harness
+
+**Extended Read Model & Validation (#67–#80):**
+- `Relation`: `join_type`, `left`, `right`, `on_clause`, `list_custom_sql()`
+- `MetadataRecord` with lazy-cached `datasource.metadata_records`
+- `Hierarchy`, `Set` parsing from drill-paths and group nodes
+- `Dashboard.device_layouts`, `has_phone_layout` (devicelayouts support)
+- `WorkbookCatalog`: `unused_fields()`, `unused_worksheets()`, `orphaned_calcs()`, `custom_sql_audit()`, `connection_audit()`
+- `inspect/complexity.py`: `ComplexityReport`, grade A–F, `Workbook.complexity_report()`
+- `xml/rules.py`: `ValidationProfile` + 10 built-in rules; `Workbook.validate(profile=)`
+- `xml/fixers.py`: `AutoFixer`, `FixAction`, 3 built-in fixers; `Workbook.auto_fix(dry_run=)`
+- Unknown XML tag tolerance: `info`-level issues, `engine.unknown_elements` tracking
+- `package/promotion.py`: `PromotionConfig.from_dict/from_yaml`, `Workbook.promote()`
+- Workbook-level `swap_connection(where=)` returning `SwapResult`
+- `bulk_update_fields()`, `bulk_rename_fields()` on `Datasource`
+- CLI: `complexity`, `auto-fix`, `promote` commands; `catalog --connections`
+
+**Test count:** 219 passed (was 140 before v0.5.0/v0.6.0)
+
 ---
 
 ## 5. Active & Upcoming Milestones
-
-### Milestone 0+: Harden the Foundation
-
-*Non-negotiable infrastructure — prevents bugs from propagating.*
-
-- [ ] **Secure XML parsing** — harden `lxml` (disable network/entity resolution, limit huge trees); `strict` mode rejects dangerous constructs, `compatibility` mode loads with warnings
-- [ ] **Credential scrubbing** — auto-strip `username`, `password`, `odbc-connect-string-extras` from `<connection>` nodes before save
-- [ ] **Golden fixture corpus** — `tests/fixtures/` with `.twb`/`.twbx` files across ≥3 Tableau versions and ≥5 workbook patterns (multi-datasource, parameters, actions, extracts, LOD-heavy, dashboard-heavy)
-- [ ] **Round-trip test harness** — for each fixture: open → save → reopen → assert byte-equivalent XML (canonical normalization)
-- [ ] **`streaming parse`** — `lxml.etree.iterparse` for gigabyte-scale workbooks
-
----
-
-### Milestone 1: Industrial-Strength `.twbx` Support
-
-*PackageManager must handle real corporate workbooks with multiple assets.*
-
-- [ ] **Package index abstraction** — `PackageManager.list_assets()`, `glob()`, `find(path_like)`, `data_dir` discovery
-- [ ] **Deterministic repackaging** — stable ZIP ordering, preserved relative paths, stripped volatile metadata; minimizes noisy diffs for source-control workflows
-- [ ] **Path normalization** — `resolve("Data/Extract.hyper")`, enforce relative paths to prevent Tableau Server error 403132
-- [ ] **`.tds`/`.tdsx` full read/write** — `Datasource.open("mydata.tds")` and `Datasource.save_as("mydata.tdsx")`
-- [ ] **Multiple `.twb` candidates** — resolution rules when archive contains >1 workbook file
-
----
-
-### Milestone 2+: Extended Read Model
-
-*Push from current ~60% to ~90% TWB XML coverage.*
-
-- [ ] **Relation parsing** — joins, custom SQL (`<relation type='text'>`), recursive nested join trees with ON clauses
-- [ ] **Metadata records** — `<remote-name>`, `<remote-type>`, `<local-name>`, `<aggregation>`, `<contains-null>`
-- [ ] **Hierarchies, sets, groups** — `<drill-paths>`, group definitions, set computation rules
-- [ ] **Dashboard device layouts** — `<devicelayouts>` for phone/tablet/desktop responsive design
-- [ ] **Unused field detection** — fields defined but not referenced in any worksheet
-- [ ] **Unused worksheet detection** — worksheets not referenced in any dashboard
-- [ ] **Orphaned calculated field detection** — calcs unused in any worksheet or other calc
-- [ ] **Custom SQL audit** — list all custom SQL queries with datasource context
-- [ ] **Complexity scoring** — configurable weighted algorithm: LOD count, nested calc depth, filter count, custom SQL, dashboard container depth; scored reports with recommendations
-- [ ] **Connection string audit** — list all connection details for security review
-
----
-
-### Milestone 3+: Validation Engine Improvements
-
-- [ ] **Pluggable rule engine** — `Rule` objects returning `ValidationIssue(level, message, path)` with version profiles
-- [ ] **Auto-fixers** — normalize connection attribute casing, bracket formatting, strip credentials
-- [ ] **Unknown tag tolerance** — warn, do not error; preserve unknown tags during round-trips
-
----
-
-### Milestone 4+: Mutation Improvements
-
-- [ ] **Environment promotion** — YAML/JSON-driven config mapping `dev → staging → prod` applied as a single function call
-- [ ] **Batch connection swap** — across all datasources in a workbook in one call
-- [ ] **Field metadata bulk maintenance** — update captions, descriptions, folders, default formats at scale with `metadata-records` crosschecks
-
----
 
 ### Milestone 5: Semantic Diff & Patch ⭐ NOVEL
 
@@ -329,19 +309,20 @@ pytableau (core)
 
 ## 6. Release Roadmap
 
-| Milestone | Target Version | Core Deliverable | Novelty |
+| Milestone | Version | Core Deliverable | Status |
 |---|---|---|---|
-| M0+ Foundation | v0.5.0 | Secure parsing, credential scrubbing, golden fixtures | — |
-| M1 .twbx | v0.5.0 | Industrial-strength packaging, .tds/.tdsx support | Medium |
-| M2+ Read Model | v0.6.0 | ~90% TWB XML: relations, metadata records, complexity scoring | High |
-| M3+ Validation | v0.6.0 | Pluggable rules, auto-fixers, unknown tag tolerance | High |
-| M4+ Mutation | v0.6.0 | Env promotion, batch ops, metadata maintenance | High |
-| M5 Diff & Patch | v0.7.0 | Git-friendly diffs, canonical JSON, patch system | **Very High** |
-| M6 Extracts | v0.8.0 | DataFrame → .twbx with XML/Hyper schema sync | High |
-| M7+ Templates | v0.8.0 | Template linting, custom templates, datasource swap | High |
-| M8 Formula Parser | v0.9.0 | lark-parser grammar, AST, lint rules, function registry | **Very High** |
-| M9 Server | v0.9.0 | Chunked publish, GraphQL metadata API, env promotion | Medium |
-| M10 Governance | v1.0.0 | WorkbookIndex, pytest plugin, accessibility, docs gen | **Very High** |
+| M0+ Foundation | v0.1.0 | Scaffolding, CI, enums, exceptions | ✅ Released |
+| M1 Read & Inspect | v0.2.0 | Workbook.open, Datasource, Worksheet, Dashboard, CLI (14 cmds) | ✅ Released |
+| M2 Mutation | v0.3.0 | Field/connection mutation, save/save_as, validation gate | ✅ Released |
+| M3 Templates | v0.4.0 | TemplateEngine, 7 templates, tooli CLI migration | ✅ Released |
+| M4 Hardening | v0.5.0 | Secure parsing, credential scrubbing, golden fixtures, .tds/.tdsx | ✅ Released |
+| M5 Extended Model | v0.6.0 | Relations, MetadataRecords, hierarchies, device layouts, complexity, ValidationProfile, AutoFixer, promote | ✅ Released |
+| M6 Diff & Patch | v0.7.0 | Git-friendly diffs, canonical JSON, patch system | 🔲 Next |
+| M7 Extracts | v0.8.0 | DataFrame → .twbx with XML/Hyper schema sync | 🔲 Planned |
+| M8 Templates+ | v0.8.0 | Template linting, custom templates, datasource swap | 🔲 Planned |
+| M9 Formula Parser | v0.9.0 | lark-parser grammar, AST, lint rules, function registry | 🔲 Planned |
+| M10 Server | v0.9.0 | Chunked publish, GraphQL metadata API, env promotion | 🔲 Planned |
+| M11 Governance | v1.0.0 | WorkbookIndex, pytest plugin, accessibility, docs gen | 🔲 Planned |
 
 **v1.0.0 success criteria:** 500+ GitHub stars, 10,000+ monthly PyPI downloads, used in 2+ enterprise CI/CD pipelines, template library covers 10+ chart types.
 
@@ -350,10 +331,10 @@ pytableau (core)
 ## 7. Top-5 Highest-ROI Immediate Tasks
 
 1. **Canonical serialization + semantic diff** — unlocks governance, patching, reviewability, and long-term confidence in the SDK
-2. **Complete datasource and relation parsing** — connections and table lineage are the #1 reason people automate Tableau files
+2. **Complete datasource and relation parsing** — connections and table lineage are the #1 reason people automate Tableau files *(partially complete: relation tree, custom SQL, metadata records all landed in v0.6.0)*
 3. **Robust formula parser (even a partial AST)** — current regex-based lineage works until it doesn't; even a token stream is a major improvement
 4. **Extract attach/refresh that updates XML metadata** — Hyper I/O is already easy; making the workbook truly consistent after a write is the defensible moat
-5. **Test fixtures across Tableau versions** — bugs will ship without this because the XML schema is unpredictable across versions
+5. **Test fixtures across Tableau versions** — bugs will ship without this *(6 golden fixtures landed in v0.5.0; real-version corpus still needed)*
 
 ---
 
@@ -376,7 +357,8 @@ pytableau (core)
 Any workbook pytableau opens and saves without modification must be byte-level or semantically identical to the original. This is the primary defense against accidental XML corruption.
 
 ### Test Assets
-- `tests/fixtures/` — real `.twb`/`.twbx` files across ≥3 Tableau versions (to be populated)
+- `tests/fixtures/` — 6 synthetic `.twb` files across v2022.4–v2024.1 patterns (minimal, single-ds, multi-ds, parameters, LOD-heavy, dashboard-actions) ✅
+- `tests/helpers.py` — `canonicalize_twb()` C14N round-trip helper ✅
 - `sample_workbook.twbx` — real Premier League stats workbook (local only, gitignored)
 - `sample_workbook_fungible.twbx` — mutation test copy (local only, gitignored)
 
