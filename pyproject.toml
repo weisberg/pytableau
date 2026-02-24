@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "pytableau"
-version = "2.0.0"
+version = "2.0.1"
 description = "The unified Python SDK for Tableau workbook engineering"
 readme = "README.md"
 license = { text = "MIT" }

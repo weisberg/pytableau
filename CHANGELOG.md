@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.1] — 2026-02-24
+
+### Fixed
+- 28 mypy type errors across `build/`, `agents/`, and `fleet/` modules (loop variable shadowing, missing return type annotations, `__exit__` return type, `Optional` element guards in `shortcuts.py`).
+
+### Changed
+- PyPI metadata: removed Python 3.10 classifier, expanded keywords (14 new: `etl`, `bi`, `governance`, `fleet`, `migration`, `automation`, `pandas`, `sdk`, …), added topic and audience classifiers.
+- README updated to reflect the full v2.0.0 feature set.
+- CHANGELOG updated with complete v2.0.0 release notes.
+
+---
+
 ## [2.0.0] — 2026-02-24
 
 ### Added
