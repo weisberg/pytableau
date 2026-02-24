@@ -30,6 +30,7 @@ from .datasource import Datasource, DatasourceCollection
 from .worksheet import Worksheet, WorksheetCollection
 
 if TYPE_CHECKING:
+    from pytableau.agents.transactions import WorkbookTransaction
     from pytableau.exceptions import ValidationIssue
     from pytableau.inspect.diff import Patch, WorkbookDiff
     from pytableau.package.promotion import PromotionChange, PromotionConfig
@@ -319,6 +320,41 @@ class Workbook:
             container = _etree.SubElement(self.xml_root, "dashboards")
         container.append(node)
         self._load_tree(self.xml_tree)
+
+    def describe(self) -> dict[str, Any]:
+        """Return a complete structured schema of this workbook as a plain dict.
+
+        Delegates to :func:`pytableau.agents.discovery.describe`.
+        Safe to serialise to JSON; ideal for AI agents that need a quick overview.
+        """
+        from pytableau.agents.discovery import describe as _describe
+
+        return _describe(self)
+
+    def capabilities(self) -> dict[str, Any]:
+        """Return a capability summary for this workbook.
+
+        Checks which optional extras are installed and summarises the workbook
+        contents.  Delegates to :func:`pytableau.agents.discovery.capabilities`.
+        """
+        from pytableau.agents.discovery import capabilities as _capabilities
+
+        return _capabilities(self)
+
+    def transaction(self) -> WorkbookTransaction:
+        """Return an atomic transaction context manager for this workbook.
+
+        On entry the XML tree is deep-copied.  If an exception propagates
+        through the ``with`` block the tree is restored, leaving the workbook
+        completely unchanged::
+
+            with wb.transaction() as tx:
+                tx.rename_field("Sales", "Rev", "Revenue")
+                tx.add_calculated_field("Sales", "Margin", "[Revenue] - [Cost]")
+        """
+        from pytableau.agents.transactions import WorkbookTransaction
+
+        return WorkbookTransaction(self)
 
     @classmethod
     def from_spec(cls, spec: Any) -> Workbook:

@@ -75,13 +75,17 @@ def quick_chart(
         ds_builder = datasource_builder
     else:
         ds_builder = DatasourceBuilder(caption)
-        ds_builder.connection("hyper", dbname=f"Data/{DatasourceBuilder(caption).name.split('.')[-1]}.hyper")
+        ds_builder.connection(
+            "hyper", dbname=f"Data/{DatasourceBuilder(caption).name.split('.')[-1]}.hyper"
+        )
 
         if columns:
             for col_caption, col_dt, col_role in columns:
                 ds_builder.column(
                     col_caption,
-                    DataType(col_dt) if col_dt in DataType.__members__.values() else DataType.STRING,
+                    DataType(col_dt)
+                    if col_dt in DataType.__members__.values()
+                    else DataType.STRING,
                     Role(col_role) if col_role in Role.__members__.values() else Role.DIMENSION,
                 )
         else:
@@ -164,7 +168,9 @@ def quick_dashboard(
 
     # Build shared datasource
     ds_builder = DatasourceBuilder(caption)
-    ds_builder.connection("hyper", dbname=f"Data/{DatasourceBuilder(caption).name.split('.')[-1]}.hyper")
+    ds_builder.connection(
+        "hyper", dbname=f"Data/{DatasourceBuilder(caption).name.split('.')[-1]}.hyper"
+    )
 
     if columns:
         for col_caption, col_dt, col_role in columns:

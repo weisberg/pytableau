@@ -12,6 +12,7 @@ Quickstart::
 from __future__ import annotations
 
 from pytableau._version import __version__
+from pytableau.agents import OperationReceipt, WorkbookTransaction
 from pytableau.build import (
     DashboardBuilder,
     DatasourceBuilder,
@@ -130,6 +131,9 @@ __all__ = [
     "quick_chart",
     "quick_dashboard",
     "Theme",
+    # Agents
+    "OperationReceipt",
+    "WorkbookTransaction",
     # Governance
     "WorkbookIndex",
     "GovernanceLintIssue",

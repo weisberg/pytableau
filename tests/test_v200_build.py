@@ -3,11 +3,8 @@
 from __future__ import annotations
 
 import json
-import textwrap
-from pathlib import Path
 
 import pytest
-from lxml import etree
 
 from pytableau.build import (
     DashboardBuilder,
@@ -28,7 +25,6 @@ from pytableau.build.theme import Theme
 from pytableau.constants import DataType, FilterType, MarkType, Role
 from pytableau.core.workbook import Workbook
 from pytableau.exceptions import DuplicateFieldError, InvalidWorkbookError
-
 
 # ---------------------------------------------------------------------------
 # XML helpers
@@ -347,7 +343,7 @@ class TestDashboardBuilder:
         )
         layouts = dash.find("devicelayouts")
         assert layouts is not None
-        phone = next(l for l in layouts if l.get("name") == "phone")
+        phone = next(el for el in layouts if el.get("name") == "phone")
         assert phone is not None
 
     def test_tablet_layout(self):
@@ -358,7 +354,7 @@ class TestDashboardBuilder:
             .build()
         )
         layouts = dash.find("devicelayouts")
-        tablet = next(l for l in layouts if l.get("name") == "tablet")
+        tablet = next(el for el in layouts if el.get("name") == "tablet")
         assert tablet is not None
 
     def test_blank_zone(self):

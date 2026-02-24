@@ -34,6 +34,17 @@ if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
 
 
+def _field_suggestion(name: str, names: list[str]) -> str:
+    """Return a suggestion string listing close-matching field captions."""
+    lower = name.lower()
+    close = [n for n in names if lower in n.lower() or n.lower() in lower]
+    if close:
+        return f"Did you mean one of: {', '.join(close[:5])}?"
+    sample = names[:5]
+    suffix = "…" if len(names) > 5 else ""
+    return f"Available fields: {', '.join(sample)}{suffix}"
+
+
 def _normalise_field_name(value: str) -> str:
     text = value.strip()
     if text.startswith("[") and text.endswith("]"):
@@ -440,6 +451,17 @@ class Datasource(XMLNodeProxy):
     def field_names(self) -> list[str]:
         return [field.caption for field in self._fields]
 
+    def available_fields(self) -> list[dict]:
+        """Return a flat list of field descriptors as plain dicts.
+
+        Each dict contains ``name``, ``caption``, ``datatype``, ``role``,
+        ``is_calculated``, and (for calculated fields) ``formula``.
+        Safe to serialise to JSON; ideal for AI agents.
+        """
+        from pytableau.agents.discovery import available_fields as _available_fields
+
+        return _available_fields(self)
+
     def _sync_fields(self) -> None:
         self._fields = self._read_fields()
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
@@ -641,7 +663,8 @@ class Datasource(XMLNodeProxy):
         field = name_or_field if isinstance(name_or_field, Field) else self.get_field(name_or_field)
         if field is None:
             raise FieldNotFoundError(
-                f"Field '{name_or_field}' not found in datasource '{self.name}'."
+                f"Field '{name_or_field}' not found in datasource '{self.name}'.",
+                suggestion=_field_suggestion(str(name_or_field), self.field_names),
             )
         parent = field.xml_node.getparent()
         if parent is not None:
@@ -680,7 +703,8 @@ class Datasource(XMLNodeProxy):
         field = self.get_field(old_caption)
         if field is None:
             raise FieldNotFoundError(
-                f"Field '{old_caption}' not found in datasource '{self.name}'."
+                f"Field '{old_caption}' not found in datasource '{self.name}'.",
+                suggestion=_field_suggestion(old_caption, self.field_names),
             )
 
         field.caption = new_caption

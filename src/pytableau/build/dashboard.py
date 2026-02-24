@@ -139,9 +139,7 @@ class DashboardBuilder:
             name: Optional zone name (defaults to ``"Text"``).
         """
         zone_name = name or "Text"
-        self._zones.append(
-            _ZoneSpec("text", zone_name, x, y, w, h, content=content)
-        )
+        self._zones.append(_ZoneSpec("text", zone_name, x, y, w, h, content=content))
         return self
 
     def filter_zone(

@@ -6,6 +6,10 @@ from __future__ import annotations
 class PyTableauError(Exception):
     """Base exception for all pytableau errors."""
 
+    def __init__(self, *args: object, suggestion: str = "") -> None:
+        super().__init__(*args)
+        self.suggestion = suggestion
+
 
 # --- File / Package Errors ---
 
@@ -25,8 +29,10 @@ class PackageError(FileError):
 class AmbiguousWorkbookError(PackageError):
     """Multiple .twb files found in a TWBX archive with no unambiguous root."""
 
-    def __init__(self, msg: str, candidates: list[str] | None = None) -> None:
-        super().__init__(msg)
+    def __init__(
+        self, msg: str, candidates: list[str] | None = None, *, suggestion: str = ""
+    ) -> None:
+        super().__init__(msg, suggestion=suggestion)
         self.candidates: list[str] = candidates or []
 
 
