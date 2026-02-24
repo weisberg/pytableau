@@ -129,3 +129,25 @@ class TemplateEngine:
             raise UnmappedPlaceholderError(
                 "Template placeholders remain unresolved: " + ", ".join(sorted(unresolved))
             )
+
+    def replace_datasource(self, old_name: str, new_node: etree._Element) -> None:
+        """Replace a datasource element in the template by its ``name`` attribute.
+
+        Args:
+            old_name: The ``name`` attribute of the datasource to replace.
+            new_node: The replacement lxml :class:`~lxml.etree._Element`.
+
+        Raises:
+            KeyError: If no datasource with *old_name* is found.
+        """
+        root = self._tree.getroot()
+        for ds in root.findall(".//datasources/datasource"):
+            if ds.get("name") == old_name:
+                parent = ds.getparent()
+                if parent is None:
+                    raise KeyError(f"Datasource {old_name!r} has no parent element.")
+                idx = list(parent).index(ds)
+                parent.remove(ds)
+                parent.insert(idx, new_node)
+                return
+        raise KeyError(f"Datasource {old_name!r} not found in template.")

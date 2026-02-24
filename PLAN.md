@@ -2,7 +2,7 @@
 
 ## The Unified Python SDK for Tableau Workbook Engineering
 
-**Version:** 0.6.0 (released)
+**Version:** 0.9.0 (released)
 **Author:** Brian
 **License:** MIT
 **Target PyPI name:** `pytableau`
@@ -207,65 +207,62 @@ pytableau (core)
 - `bulk_update_fields()`, `bulk_rename_fields()` on `Datasource`
 - CLI: `complexity`, `auto-fix`, `promote` commands; `catalog --connections`
 
-**Test count:** 219 passed (was 140 before v0.5.0/v0.6.0)
+**Test count:** 297 passed, 10 skipped (was 219 before v0.7.0–v0.9.0)
 
 ---
 
-## 5. Active & Upcoming Milestones
+## 5. Completed Milestones
 
-### Milestone 5: Semantic Diff & Patch ⭐ NOVEL
+### ✅ M6: Semantic Diff & Patch (v0.7.0) ⭐ NOVEL
 
-*The feature that makes engineering teams adopt pytableau: Git-friendly diffs and repeatable patches. No existing Python library provides this.*
+*Git-friendly diffs and repeatable patches.*
 
-- [ ] **Canonical JSON serialization** — stable ordering, stripped volatile IDs, normalized whitespace and brackets
-- [ ] **Git normalization hook** (`git_clean()`) — strip Base64-encoded `<thumbnails>`, enforce alphabetical tag ordering; eliminates VCS bloat from Tableau's arbitrary tag reordering on save
-- [ ] **Semantic diff** — recursively compare object models: report added/removed/modified datasources, fields, calculations, worksheets, dashboards, filters, parameters, connections, actions
-- [ ] **Diff output formats** — human-readable text, JSON (machine-parseable), HTML
-- [ ] **Patch system** — `wb.diff(other) → Patch`, `wb.apply(patch, validate=True)`
-- [ ] **CLI** — `pytableau diff a.twbx b.twbx --json`, `pytableau patch a.twbx changes.json`
-- [ ] **Changelog generation** between workbook versions
+- [x] **Canonical JSON serialization** (`xml/canonical.py`) — stable ordering, stripped volatile IDs
+- [x] **Git normalization hook** (`git_clean()`) — strip Base64-encoded `<thumbnails>`, volatile attrs
+- [x] **Semantic diff** (`inspect/diff.py`) — `WorkbookDiff`, `DatasourceDiff`, `FieldDiff`
+- [x] **Diff output formats** — `to_text()`, `to_dict()`, `to_html()`
+- [x] **Patch system** — `Patch`, `PatchOp`, `PatchAction`, `apply_patch()`
+- [x] **CLI** — `diff`, `patch`, `git-clean`, `to-json` commands
+- [x] **Structural XML diff** (`xml/differ.py`) — unified diff via difflib
 
----
+### ✅ M7: Hyper Extract Management (v0.8.0)
 
-### Milestone 6: Hyper Extract Management
+- [x] **`HyperFile` wrapper** — context-managed; `list_tables()`, `schema()`, `row_count()`
+- [x] **Bulk insert** — `bulk_insert(df, batch_size=10_000)`
+- [x] **Incremental refresh** — rolling windows, upserts
+- [x] **Extract contract tests** — `ExtractManager.contract_test(datasource)`
+- [x] **`incremental_refresh()`** on `ExtractManager`
 
-- [ ] **`HyperFile` wrapper** — context-managed `HyperProcess → Connection → operation → cleanup`; `list_tables()`, `get_schema()`, bulk insert from iterables
-- [ ] **DataFrame → `.twbx` with XML sync** — inject refreshed extract AND automatically synchronize `<column>` and `<metadata-records>` elements so Tableau recognizes the new schema
-- [ ] **Extract provenance metadata** — what DataFrame was written, when, row counts, schema hash
-- [ ] **Incremental refresh patterns** — rolling windows, upserts via Hyper SQL
-- [ ] **Extract contract tests** — generate hyper → attach into `.twbx` → reopen → verify catalog consistency
+### ✅ M8: Template Engine Extensions (v0.8.0)
 
----
+- [x] **`replace_datasource()`** on `TemplateEngine` — swap entire datasource node
+- [x] **`save_as_template()`** on `Workbook` — replace captions with `__FIELDN__` placeholders
+- [x] **Environment switch patterns** via datasource replacement
 
-### Milestone 7+: Template Engine Extensions
+### ✅ M9: Formula Parser & Linter (v0.9.0) ⭐ NOVEL
 
-- [ ] **Template linting** — `validate_all_mapped` ensures all placeholders resolved before save
-- [ ] **Custom template creation** — `wb.save_as_template("my_template.twb")`
-- [ ] **Datasource replacement** — swap entire datasource definition in a template
-- [ ] **Environment switch patterns** — `dev → prod` as template application
+*First open-source parser for Tableau's expression language.*
 
----
+- [x] **`lark`-based grammar** (`calculations/parser.py`) — field refs, LOD, IF/CASE, 100+ functions
+- [x] **AST node definitions** (`calculations/ast.py`) — `FieldRef`, `FuncCall`, `LodExpr`, etc.
+- [x] **6 lint rules** (`calculations/linter.py`): UnknownFunction, ExcessiveLodNesting, NestedIf, DeprecatedFunction, UnknownFieldReference, CyclicDependency
+- [x] **Function registry** (`calculations/functions.py`) — 100+ functions with deprecation status
+- [x] **`lint_workbook()`** — lint all calculated fields across all datasources
 
-### Milestone 8: Calculated Field Parser & Linter ⭐ NOVEL
+### ✅ M10: Server Integration Extensions (v0.9.0)
 
-*No parser exists for Tableau's expression language in open source.*
-
-- [ ] **`lark-parser` grammar** for Tableau's full expression language: field references `[Field]`, LOD expressions `{FIXED/INCLUDE/EXCLUDE}`, IF/THEN/ELSE/CASE/WHEN, 100+ function calls, table calculations, date literals `#2023-01-01#`
-- [ ] **AST node definitions** — clean abstract syntax tree for programmatic analysis
-- [ ] **Lint rules engine**:
-  - Unused field references
-  - Nested-IF anti-patterns (prefer CASE/WHEN)
-  - Excessive LOD nesting depth
-  - Deprecated function usage
-  - Field reference validation against datasource schema
-  - **Cycle detection** in calculation dependencies
-- [ ] **Tableau function registry** — all 100+ functions with signatures, return types, deprecation status
+- [x] **`list_workbooks()`**, **`refresh_extract()`** on `ServerClient`
+- [x] **`publish_workbook_chunked()`** — auto-detect file size
+- [x] **`detect_drift()`** — compare local connections to server metadata
+- [x] **`MetadataClient`** (`server/metadata.py`) — GraphQL client for Tableau Metadata API
+- [x] **`detect_drift_workflow()`** in `server/workflows.py`
 
 ---
 
-### Milestone 9: Server Integration Extensions
+## 6. Active & Upcoming Milestones
 
-- [ ] **Unified publish** — auto-detect file size; monolithic POST under 64MB, chunked multipart above; `asJob=True` for async to prevent HTTP timeouts
+### Milestone 9: Server Integration Extensions (continued)
+
 - [ ] **Metadata API (GraphQL)** — typed query builders for lineage queries via `server.metadata.query()`
 - [ ] **Local-vs-server drift detection** — compare parsed `.twbx` against published workbook's server metadata; detect broken extracts or mismatched connections
 - [ ] **Environment promotion workflow** — `promote_workbook(path, from_env, to_env)`: download → connection swap → validate → republish

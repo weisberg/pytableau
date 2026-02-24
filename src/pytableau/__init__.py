@@ -12,6 +12,7 @@ Quickstart::
 from __future__ import annotations
 
 from pytableau._version import __version__
+from pytableau.calculations import LintIssue
 from pytableau.constants import (
     AggregationType,
     ConnectionType,
@@ -53,6 +54,7 @@ from pytableau.exceptions import (
     ValidationIssue,
     XMLError,
 )
+from pytableau.inspect.diff import Patch, WorkbookDiff
 
 __all__ = [
     # Version
@@ -86,6 +88,11 @@ __all__ = [
     "TemplateNotFoundError",
     "ValidationIssue",
     "Workbook",
+    # Diff & Patch
+    "WorkbookDiff",
+    "Patch",
+    # Formula linter
+    "LintIssue",
     # Enums
     "MarkType",
     "DataType",

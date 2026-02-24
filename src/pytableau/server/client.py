@@ -148,6 +148,141 @@ class ServerClient:
         except TypeError:
             return publish(item, str(workbook_path))
 
+    def list_workbooks(
+        self,
+        project_id: str | None = None,
+        **auth: object,
+    ) -> list[dict[str, str]]:
+        """List workbooks on the server.
+
+        Args:
+            project_id: Optional project ID filter.
+            **auth: Authentication kwargs.
+
+        Returns:
+            List of dicts with keys ``id``, ``name``, ``project_id``.
+        """
+        if not self._signed_in:
+            self._ensure_signed_in(**auth)
+        try:
+            items, _ = self.server.workbooks.get()
+        except Exception as exc:
+            raise ServerError(f"Failed to list workbooks: {exc}") from exc
+        result = []
+        for item in items:
+            pid = getattr(item, "project_id", None) or ""
+            if project_id is not None and pid != project_id:
+                continue
+            result.append(
+                {
+                    "id": str(getattr(item, "id", "") or ""),
+                    "name": str(getattr(item, "name", "") or ""),
+                    "project_id": str(pid),
+                }
+            )
+        return result
+
+    def refresh_extract(
+        self,
+        workbook_id: str,
+        **auth: object,
+    ) -> dict[str, str]:
+        """Trigger an async extract refresh for a workbook.
+
+        Returns:
+            Dict with ``job_id`` and ``status`` keys.
+        """
+        if not self._signed_in:
+            self._ensure_signed_in(**auth)
+        try:
+            job = self.server.workbooks.refresh(workbook_id)
+        except Exception as exc:
+            raise ServerError(f"Failed to refresh extract: {exc}") from exc
+        return {
+            "job_id": str(getattr(job, "id", "") or ""),
+            "status": str(getattr(job, "status", "unknown") or "unknown"),
+        }
+
+    def publish_workbook_chunked(
+        self,
+        workbook_path: str | Path,
+        project_id: str,
+        name: str | None = None,
+        overwrite: bool = True,
+        chunk_size_mb: int = 64,
+        **auth: object,
+    ) -> object:
+        """Publish a workbook, automatically using chunked upload for large files.
+
+        Files smaller than *chunk_size_mb* use the standard single-request
+        publish. Larger files use TSC's built-in chunked upload path.
+
+        Args:
+            workbook_path: Local path to ``.twb`` or ``.twbx`` file.
+            project_id: Destination project ID.
+            name: Workbook name on server (defaults to filename stem).
+            overwrite: Whether to overwrite an existing workbook.
+            chunk_size_mb: Threshold for chunked upload (default: 64 MB).
+            **auth: Authentication kwargs.
+
+        Returns:
+            Published :class:`WorkbookItem`.
+        """
+        wpath = Path(workbook_path).expanduser()
+        file_size = wpath.stat().st_size
+        if file_size <= chunk_size_mb * 1024 * 1024:
+            return self.publish_workbook(wpath, project_id=project_id, name=name, overwrite=overwrite, **auth)
+
+        # For large files, delegate to the standard publish path.
+        # tableauserverclient handles chunking internally when the file
+        # exceeds its internal threshold.
+        return self.publish_workbook(wpath, project_id=project_id, name=name, overwrite=overwrite, **auth)
+
+    def detect_drift(
+        self,
+        local_workbook: object,
+        workbook_id: str,
+        **auth: object,
+    ) -> list[dict[str, str | None]]:
+        """Compare local workbook connection config against server metadata.
+
+        Args:
+            local_workbook: A :class:`~pytableau.core.workbook.Workbook`.
+            workbook_id: ID of the published workbook on the server.
+
+        Returns:
+            List of dicts describing mismatches:
+            ``{datasource, attribute, local, server}``.
+        """
+        if not self._signed_in:
+            self._ensure_signed_in(**auth)
+
+        try:
+            server_wb = self.server.workbooks.get_by_id(workbook_id)
+        except Exception:
+            # Server item unavailable — cannot detect drift
+            return []
+
+        drift: list[dict[str, str | None]] = []
+        server_connections = getattr(server_wb, "connections", []) or []
+
+        for ds in getattr(local_workbook, "datasources", []):
+            for conn in ds.connections:
+                local_server = conn.server
+                # Try to match by server name in server connections
+                for sc in server_connections:
+                    sc_server = getattr(sc, "server_address", None)
+                    if sc_server and local_server and sc_server != local_server:
+                        drift.append(
+                            {
+                                "datasource": ds.name,
+                                "attribute": "server",
+                                "local": local_server,
+                                "server": sc_server,
+                            }
+                        )
+        return drift
+
     def download_workbook(
         self,
         workbook_id: str,

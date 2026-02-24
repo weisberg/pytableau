@@ -31,6 +31,7 @@ from .worksheet import Worksheet, WorksheetCollection
 
 if TYPE_CHECKING:
     from pytableau.exceptions import ValidationIssue
+    from pytableau.inspect.diff import Patch, WorkbookDiff
     from pytableau.package.promotion import PromotionChange, PromotionConfig
 
 
@@ -602,3 +603,94 @@ class Workbook:
         if profile is not None:
             issues.extend(profile.check(self))
         return issues
+
+    # ------------------------------------------------------------------
+    # v0.7.0 — Diff, Patch, canonical JSON, git_clean
+    # ------------------------------------------------------------------
+
+    def diff(self, other: Workbook) -> WorkbookDiff:
+        """Compute a semantic diff between this workbook and *other*.
+
+        Returns:
+            A :class:`~pytableau.inspect.diff.WorkbookDiff` describing
+            added/removed/modified datasources, fields, and worksheets.
+        """
+        from pytableau.inspect.diff import diff_workbooks
+        return diff_workbooks(self, other)
+
+    def apply(self, patch: Patch, *, validate: bool = True) -> int:
+        """Apply a :class:`~pytableau.inspect.diff.Patch` to this workbook.
+
+        Unknown or missing targets are skipped with a warning.
+
+        Args:
+            patch: The patch to apply.
+            validate: If ``True`` (default), raise on schema errors after applying.
+
+        Returns:
+            Number of ops successfully applied.
+        """
+        from pytableau.inspect.diff import apply_patch
+        return apply_patch(self, patch, validate=validate)
+
+    def git_clean(self) -> None:
+        """Strip thumbnails and volatile attributes from the source file on disk.
+
+        Requires that the workbook was opened from or saved to a ``.twb`` file.
+        """
+        from pytableau.xml.canonical import git_clean as _gc
+        if self._path is None:
+            raise ValueError("Workbook has no source path; save to a .twb file first.")
+        _gc(self._path)
+
+    def to_json(self) -> str:
+        """Serialize workbook to a canonical, deterministic JSON string.
+
+        Suitable for storing alongside workbooks in version control to
+        enable human-readable field/connection diffs.
+        """
+        from pytableau.xml.canonical import to_json
+        return to_json(self)
+
+    # ------------------------------------------------------------------
+    # v0.8.0 — save_as_template
+    # ------------------------------------------------------------------
+
+    def save_as_template(
+        self,
+        path: str | Path,
+        *,
+        field_placeholder_prefix: str = "FIELD",
+    ) -> dict[str, str]:
+        """Save workbook as a reusable template with field caption placeholders.
+
+        Replaces all ``caption`` attributes on datasource columns with
+        ``__FIELDN__`` tokens and writes the result to *path*.
+        Does NOT modify the live workbook.
+
+        Args:
+            path: Destination ``.twb`` path.
+            field_placeholder_prefix: Prefix for generated placeholder names.
+
+        Returns:
+            Mapping of ``{placeholder: original_caption}`` for caller reference.
+        """
+        import copy
+
+        mapping: dict[str, str] = {}
+        tree_copy = copy.deepcopy(self._tree)
+        root = tree_copy.getroot()
+
+        for counter, col in enumerate(root.xpath("//datasource/columns/column[@caption]")):
+            orig = col.get("caption", "")
+            placeholder = f"__{field_placeholder_prefix}{counter}__"
+            col.set("caption", placeholder)
+            mapping[placeholder] = orig
+
+        dest = Path(path).expanduser()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        from lxml import etree as _etree
+        dest.write_bytes(
+            _etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
+        )
+        return mapping

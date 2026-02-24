@@ -42,7 +42,7 @@ from pytableau.exceptions import (
 app = Tooli(
     name="pytableau",
     description="The unified Python SDK for Tableau workbook engineering.",
-    version="0.6.0",
+    version="0.9.0",
 )
 
 
@@ -125,8 +125,9 @@ def validate(
 def diff(
     before: Annotated[Path, Argument(help="Path to base .twb or .twbx")],
     after: Annotated[Path, Argument(help="Path to changed .twb or .twbx")],
+    semantic: Annotated[bool, Option("--semantic", help="Use semantic object-model diff")] = False,
 ) -> dict:
-    """Show semantic differences between two Tableau workbooks."""
+    """Show differences between two Tableau workbooks."""
     from pytableau.core.workbook import Workbook
 
     try:
@@ -135,18 +136,43 @@ def diff(
     except PyTableauError as exc:
         raise _map_error(exc) from exc
 
-    before_lines = set(before_wb.to_xml_string().splitlines())
-    after_lines = set(after_wb.to_xml_string().splitlines())
-    added = sorted(after_lines - before_lines)
-    removed = sorted(before_lines - after_lines)
+    if semantic:
+        wb_diff = before_wb.diff(after_wb)
+        return {
+            "before": str(before),
+            "after": str(after),
+            "is_empty": wb_diff.is_empty(),
+            "summary": wb_diff.to_text(),
+            **wb_diff.to_dict(),
+        }
 
+    # XML structural diff
+    try:
+        from pytableau.xml.differ import xml_diff
+        diff_lines = xml_diff(before, after)
+    except Exception:
+        # Fallback to simple set diff if paths don't resolve to plain .twb
+        before_lines = set(before_wb.to_xml_string().splitlines())
+        after_lines = set(after_wb.to_xml_string().splitlines())
+        added = sorted(after_lines - before_lines)
+        removed = sorted(before_lines - after_lines)
+        return {
+            "before": str(before),
+            "after": str(after),
+            "added_count": len(added),
+            "removed_count": len(removed),
+            "added": added,
+            "removed": removed,
+        }
+
+    added = [ln.rstrip("\n") for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++")]
+    removed = [ln.rstrip("\n") for ln in diff_lines if ln.startswith("-") and not ln.startswith("---")]
     return {
         "before": str(before),
         "after": str(after),
+        "diff_lines": [ln.rstrip("\n") for ln in diff_lines],
         "added_count": len(added),
         "removed_count": len(removed),
-        "added": added,
-        "removed": removed,
     }
 
 
@@ -594,6 +620,193 @@ def promote(
         "to_env": to_env,
         "changes": len(changes),
         "details": [c._asdict() for c in changes],
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def to_json(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    output: Annotated[
+        Path | None, Option("-o", help="Write JSON to this path (default: stdout)")
+    ] = None,
+) -> dict:
+    """Serialize a workbook to canonical JSON for version control."""
+    from pytableau.core.workbook import Workbook
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    json_str = wb.to_json()
+
+    if output is not None:
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_text(json_str, encoding="utf-8")
+
+    import json as _json
+    return {
+        "path": str(workbook),
+        "output": str(output) if output else None,
+        "canonical": _json.loads(json_str),
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def git_clean(
+    workbook: Annotated[Path, Argument(help="Path to .twb file to clean")],
+) -> dict:
+    """Strip thumbnails and volatile attributes for VCS-friendly diffs."""
+    from pytableau.xml.canonical import git_clean as _gc
+
+    record_dry_action("git_clean", str(workbook))
+
+    try:
+        _gc(workbook, in_place=True)
+    except Exception as exc:
+        raise InputError(f"Failed to clean workbook: {exc}") from exc
+
+    return {
+        "workbook": str(workbook),
+        "status": "cleaned",
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def patch(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx to patch")],
+    patch_file: Annotated[Path, Option("--patch-file", help="Path to JSON patch file")],
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
+    """Apply a JSON patch file to a workbook."""
+    import json as _json
+
+    from pytableau.core.workbook import Workbook
+    from pytableau.inspect.diff import Patch
+
+    destination = output or workbook
+    record_dry_action("patch", str(workbook), details={"patch_file": str(patch_file), "output": str(destination)})
+
+    try:
+        patch_obj = Patch.from_dict(_json.loads(patch_file.read_text()))
+    except Exception as exc:
+        raise InputError(f"Invalid patch file: {exc}") from exc
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    applied = wb.apply(patch_obj, validate=True)
+
+    try:
+        wb.save_as(destination, scrub_credentials=False)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "ops_total": len(patch_obj.ops),
+        "ops_applied": applied,
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def formula_lint(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> dict:
+    """Lint all calculated field formulas in a workbook."""
+    from pytableau.calculations.linter import lint_workbook
+    from pytableau.core.workbook import Workbook
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    issues = lint_workbook(wb)
+    return {
+        "path": str(workbook),
+        "issue_count": len(issues),
+        "issues": [i.to_dict() for i in issues],
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def formula_parse(
+    formula: Annotated[str, Argument(help="Tableau formula string to parse")],
+) -> dict:
+    """Parse a Tableau formula string and return the AST as JSON."""
+    import dataclasses
+
+    try:
+        from pytableau.calculations.parser import parse
+    except ImportError as exc:
+        raise InputError(f"Formula parsing requires pytableau[analysis]: {exc}") from exc
+
+    try:
+        ast = parse(formula)
+    except Exception as exc:
+        return {
+            "formula": formula,
+            "success": False,
+            "error": str(exc),
+            "ast": None,
+        }
+
+    def _node_to_dict(node):
+        if dataclasses.is_dataclass(node) and not isinstance(node, type):
+            d = {"_type": type(node).__name__}
+            for f in dataclasses.fields(node):
+                val = getattr(node, f.name)
+                if isinstance(val, list):
+                    val = [_node_to_dict(v) if dataclasses.is_dataclass(v) else v for v in val]
+                elif dataclasses.is_dataclass(val):
+                    val = _node_to_dict(val)
+                d[f.name] = val
+            return d
+        return node
+
+    return {
+        "formula": formula,
+        "success": True,
+        "ast": _node_to_dict(ast),
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def server_list(
+    server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
+    project: Annotated[str | None, Option(help="Filter by project ID")] = None,
+    token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
+    token_secret: Annotated[
+        str | None, Option(help="Personal access token secret")
+    ] = None,
+) -> dict:
+    """List workbooks on a Tableau Server or Cloud instance."""
+    from pytableau.server.client import ServerClient
+
+    auth: dict[str, str] = {}
+    if token_name is not None:
+        auth["token_name"] = token_name
+    if token_secret is not None:
+        auth["token_secret"] = token_secret
+
+    try:
+        with ServerClient(server, **auth) as client:
+            workbooks = client.list_workbooks(project_id=project, **auth)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "server": server,
+        "workbook_count": len(workbooks),
+        "workbooks": workbooks,
     }
 
 

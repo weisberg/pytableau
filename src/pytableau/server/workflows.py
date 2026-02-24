@@ -41,6 +41,28 @@ def publish_workbook(
         )
 
 
+def detect_drift_workflow(
+    server: str,
+    local_workbook: Workbook,
+    workbook_id: str,
+    **auth: object,
+) -> list[dict[str, str | None]]:
+    """Compare local workbook connection config against server-published metadata.
+
+    Args:
+        server: Tableau Server URL.
+        local_workbook: Locally-loaded :class:`Workbook`.
+        workbook_id: ID of the published workbook to compare against.
+        **auth: Authentication kwargs.
+
+    Returns:
+        List of drift dicts: ``{datasource, attribute, local, server}``.
+        Empty list means no drift detected.
+    """
+    with ServerClient(server, **auth) as client:
+        return client.detect_drift(local_workbook, workbook_id, **auth)
+
+
 def refresh_workbook(
     server: str,
     workbook_id: str,
