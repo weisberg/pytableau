@@ -1,7 +1,3 @@
-"""Tableau 2024.x XML schema specifics.
-
-.. note::
-    Full implementation is tracked in Phase 1 of the development plan.
-"""
+"""Tableau 2024.x XML schema specifics."""
 
 from __future__ import annotations

@@ -3,9 +3,6 @@
 A ``.twbx`` file is a ZIP archive containing a ``.twb`` XML file and
 optional data files (e.g. ``.hyper`` extract).  :class:`PackageManager`
 handles extraction, mutation, and re-packaging transparently.
-
-.. note::
-    Full implementation is tracked in Phase 1 of the development plan.
 """
 
 from __future__ import annotations

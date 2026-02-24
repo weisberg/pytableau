@@ -23,6 +23,8 @@ nav:
   - Quickstart: quickstart.md
   - API:
       - Overview: api/index.md
+      - Governance: api/governance.md
+      - Testing Plugin: api/testing.md
   - Cookbook:
       - Recipes: cookbook/index.md
 

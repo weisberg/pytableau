@@ -24,6 +24,7 @@ from pytableau.constants import (
     SortOrder,
     ValidationLevel,
 )
+from pytableau.core.formatting import Color, ColorPalette, Font, FormatSpec
 from pytableau.core.workbook import Workbook
 from pytableau.exceptions import (
     AmbiguousWorkbookError,
@@ -54,7 +55,14 @@ from pytableau.exceptions import (
     ValidationIssue,
     XMLError,
 )
+from pytableau.governance import (
+    GovernanceLintIssue,
+    GovernanceRuleset,
+    WorkbookIndex,
+    lint_with_ruleset,
+)
 from pytableau.inspect.diff import Patch, WorkbookDiff
+from pytableau.package.assets import WorkbookAsset, add_asset, extract_asset, list_assets
 
 __all__ = [
     # Version
@@ -93,6 +101,21 @@ __all__ = [
     "Patch",
     # Formula linter
     "LintIssue",
+    # Formatting
+    "Color",
+    "Font",
+    "ColorPalette",
+    "FormatSpec",
+    # Package assets
+    "WorkbookAsset",
+    "list_assets",
+    "extract_asset",
+    "add_asset",
+    # Governance
+    "WorkbookIndex",
+    "GovernanceLintIssue",
+    "GovernanceRuleset",
+    "lint_with_ruleset",
     # Enums
     "MarkType",
     "DataType",

@@ -42,7 +42,7 @@ from pytableau.exceptions import (
 app = Tooli(
     name="pytableau",
     description="The unified Python SDK for Tableau workbook engineering.",
-    version="0.9.0",
+    version="1.0.0",
 )
 
 
@@ -842,3 +842,86 @@ def download(
         "output": str(output),
         "status": "downloaded",
     }
+
+
+# ---------------------------------------------------------------------------
+# Governance group
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def governance_lint(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    ruleset: Annotated[
+        Path | None, Option("--ruleset", "-r", help="Path to YAML ruleset file")
+    ] = None,
+    exit_code: Annotated[
+        bool, Option("--exit-code", help="Exit with code 1 if any errors found")
+    ] = False,
+) -> dict:
+    """Lint a workbook against governance rules."""
+    import sys
+
+    from pytableau.core.workbook import Workbook
+    from pytableau.governance.rules import GovernanceRuleset, lint_with_ruleset
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    rs = GovernanceRuleset.from_yaml(ruleset) if ruleset is not None else GovernanceRuleset.default()
+    issues = lint_with_ruleset(wb, rs)
+
+    result = {
+        "path": str(workbook),
+        "passed": not any(i.severity == "error" for i in issues),
+        "issue_count": len(issues),
+        "issues": [
+            {"rule": i.rule, "severity": i.severity, "message": i.message}
+            for i in issues
+        ],
+    }
+
+    if exit_code and not result["passed"]:
+        sys.exit(1)
+
+    return result
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def index_workbooks(
+    directory: Annotated[Path, Argument(help="Directory to scan for workbooks")],
+    db: Annotated[Path, Option("--db", help="SQLite database path")] = Path("pytableau.db"),
+) -> dict:
+    """Index all workbooks in a directory into a SQLite database."""
+    from pytableau.governance.index import WorkbookIndex
+
+    record_dry_action("index_workbooks", str(directory), details={"db": str(db)})
+
+    with WorkbookIndex(db) as idx:
+        count = idx.add_directory(directory)
+
+    return {
+        "directory": str(directory),
+        "db": str(db),
+        "workbooks_indexed": count,
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def search_index(
+    term: Annotated[str, Argument(help="Search term")],
+    db: Annotated[Path, Option("--db", help="SQLite database path")] = Path("pytableau.db"),
+    kind: Annotated[
+        str, Option("--kind", help="Search kind: 'field' or 'connection'")
+    ] = "field",
+) -> list:
+    """Search a workbook index for fields or connections."""
+    from pytableau.governance.index import WorkbookIndex
+
+    with WorkbookIndex(db) as idx:
+        if kind == "connection":
+            return idx.search_connection(term)
+        return idx.search_field(term)

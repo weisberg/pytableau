@@ -1,8 +1,4 @@
-"""Field, CalculatedField, Parameter, Group, Set, and Bin objects.
-
-.. note::
-    Full implementation is tracked in Phases 1–2 of the development plan.
-"""
+"""Field, CalculatedField, Parameter, Group, Set, and Bin objects."""
 
 from __future__ import annotations
 

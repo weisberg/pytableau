@@ -146,6 +146,9 @@ def test_template_library_builtin_names() -> None:
         "treemap",
         "map",
         "kpi_dashboard",
+        "stacked_bar",
+        "dual_axis",
+        "area_chart",
     }
     assert set(BUILTIN_TEMPLATES) == expected
 

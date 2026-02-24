@@ -4,9 +4,6 @@ Every pytableau object that wraps an XML element (Datasource, Worksheet,
 Dashboard, etc.) inherits from :class:`XMLNodeProxy`.  The proxy ensures
 that mutations go through the validation layer and that raw ``lxml``
 access is always available as an escape hatch.
-
-.. note::
-    Full implementation is tracked in Phase 1 of the development plan.
 """
 
 from __future__ import annotations

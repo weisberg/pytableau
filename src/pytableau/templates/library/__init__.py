@@ -9,10 +9,12 @@ Available templates:
 - ``treemap`` — Hierarchical treemap
 - ``map`` — Filled geographical map
 - ``kpi_dashboard`` — Multi-KPI dashboard layout
+- ``stacked_bar`` — Stacked bar chart with color dimension
+- ``dual_axis`` — Dual-axis bar + line combo chart
+- ``area_chart`` — Area chart with date dimension and color encoding
 
 .. note::
     Template ``.twb`` files are created in Tableau Desktop 2024.1+.
-    They will be added in Phase 4 of the development plan.
 """
 
 from __future__ import annotations
@@ -29,6 +31,9 @@ BUILTIN_TEMPLATES: tuple[str, ...] = (
     "treemap",
     "map",
     "kpi_dashboard",
+    "stacked_bar",
+    "dual_axis",
+    "area_chart",
 )
 
 
