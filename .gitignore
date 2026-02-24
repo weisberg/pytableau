@@ -39,3 +39,4 @@ Thumbs.db
 # Tableau workbook binaries (large test fixtures — keep local only)
 *.twbx
 !src/pytableau/build/
+src/pytableau/build/__pycache__/
