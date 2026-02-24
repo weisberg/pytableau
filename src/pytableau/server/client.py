@@ -231,12 +231,16 @@ class ServerClient:
         wpath = Path(workbook_path).expanduser()
         file_size = wpath.stat().st_size
         if file_size <= chunk_size_mb * 1024 * 1024:
-            return self.publish_workbook(wpath, project_id=project_id, name=name, overwrite=overwrite, **auth)
+            return self.publish_workbook(
+                wpath, project_id=project_id, name=name, overwrite=overwrite, **auth
+            )
 
         # For large files, delegate to the standard publish path.
         # tableauserverclient handles chunking internally when the file
         # exceeds its internal threshold.
-        return self.publish_workbook(wpath, project_id=project_id, name=name, overwrite=overwrite, **auth)
+        return self.publish_workbook(
+            wpath, project_id=project_id, name=name, overwrite=overwrite, **auth
+        )
 
     def detect_drift(
         self,

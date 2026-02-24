@@ -380,9 +380,7 @@ class GovernanceRuleset:
         )
 
 
-def lint_with_ruleset(
-    workbook: Workbook, ruleset: GovernanceRuleset
-) -> list[GovernanceLintIssue]:
+def lint_with_ruleset(workbook: Workbook, ruleset: GovernanceRuleset) -> list[GovernanceLintIssue]:
     """Convenience wrapper: run *ruleset* against *workbook*.
 
     Args:

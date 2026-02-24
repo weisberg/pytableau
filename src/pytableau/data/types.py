@@ -78,4 +78,3 @@ def all_mappings() -> dict[str, dict[str, str]]:
         "hyper_to_tableau_xml": dict(_HYPER_TO_TABLEAU),
         "pandas_to_hyper_remote_type": dict(_HYPER_TO_METADATA_REMOTE),
     }
-

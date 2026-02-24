@@ -83,11 +83,15 @@ def _write_base_twb(path: Path) -> None:
 
 
 def _write_versioned_twb(path: Path, *, extra_tag: str | None = None) -> None:
-    root = etree.Element("workbook", attrib={"source-build": "20241.24.0312.0830", "source-platform": "test"})
+    root = etree.Element(
+        "workbook", attrib={"source-build": "20241.24.0312.0830", "source-platform": "test"}
+    )
     if extra_tag:
         etree.SubElement(root, extra_tag)
     path.write_text(
-        etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8"),
+        etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True).decode(
+            "utf-8"
+        ),
         encoding="utf-8",
     )
 
@@ -108,11 +112,15 @@ def _install_fake_tableau_serverclient(monkeypatch) -> dict[str, Any]:
             self.project_id = project_id
 
     class FakeWorkbooks:
-        def publish(self, item: FakeWorkbookItem, path: str, mode: str | object | None = None) -> None:
+        def publish(
+            self, item: FakeWorkbookItem, path: str, mode: str | object | None = None
+        ) -> None:
             state["published"].append((item.name, item.project_id, path, str(mode)))
             return {"name": item.name, "project": item.project_id, "path": path, "mode": str(mode)}
 
-        def download(self, workbook_id: str, filepath: str | Path | None = None, **kwargs: Any) -> None:
+        def download(
+            self, workbook_id: str, filepath: str | Path | None = None, **kwargs: Any
+        ) -> None:
             state["downloaded"].append((workbook_id, str(filepath)))
             target = Path(filepath) if filepath is not None else Path(f"{workbook_id}.twb")
             target.parent.mkdir(parents=True, exist_ok=True)
@@ -213,7 +221,10 @@ def test_dashboard_action_and_zone_mutation(tmp_path: Path) -> None:
     action = dashboard.add_filter_action("FilterByRegion", field="Region", source_sheet="Overview")
     assert action.name == "FilterByRegion"
     assert action.fields == ["Region"]
-    assert dashboard.add_highlight_action("HighlightByRegion", field="Region").name == "HighlightByRegion"
+    assert (
+        dashboard.add_highlight_action("HighlightByRegion", field="Region").name
+        == "HighlightByRegion"
+    )
     assert dashboard.add_url_action("OpenWeb", "https://example.com").name == "OpenWeb"
     assert len(dashboard.actions) == 3
     assert dashboard.remove_action("OpenWeb") == 1
@@ -265,7 +276,13 @@ def test_server_workflow_with_fake_client(monkeypatch, tmp_path: Path) -> None:
 
     def _exercise(state: dict[str, Any]) -> None:
         with ServerClient("https://server", site_id="site") as client:
-            client.publish_workbook(workbook_path, project_id="proj", name="report", token_name="token", token_secret="secret")
+            client.publish_workbook(
+                workbook_path,
+                project_id="proj",
+                name="report",
+                token_name="token",
+                token_secret="secret",
+            )
             assert state["published"][0][0] == "report"
 
         workflow_publish_workbook(

@@ -49,7 +49,12 @@ def _write_sample_twb(path: Path) -> None:
     etree.SubElement(
         columns,
         "column",
-        attrib={"name": "sales_id", "caption": "Sales ID", "datatype": "integer", "role": "dimension"},
+        attrib={
+            "name": "sales_id",
+            "caption": "Sales ID",
+            "datatype": "integer",
+            "role": "dimension",
+        },
     )
     etree.SubElement(
         columns,
@@ -66,7 +71,9 @@ def _write_sample_twb(path: Path) -> None:
             "role": "measure",
         },
     )
-    etree.SubElement(calc, "calculation", attrib={"class": "tableau", "formula": "[Sales] / [Cost] + [Region]"})
+    etree.SubElement(
+        calc, "calculation", attrib={"class": "tableau", "formula": "[Sales] / [Cost] + [Region]"}
+    )
 
     parameters = etree.SubElement(
         datasources,
@@ -119,7 +126,9 @@ def _write_sample_twb(path: Path) -> None:
 
     dashboards = etree.SubElement(workbook, "dashboards")
     dashboard = etree.SubElement(dashboards, "dashboard", attrib={"name": "Dashboard"})
-    etree.SubElement(dashboard, "size", attrib={"type": "automatic", "width": "1200", "height": "800"})
+    etree.SubElement(
+        dashboard, "size", attrib={"type": "automatic", "width": "1200", "height": "800"}
+    )
     root_zone = etree.SubElement(
         dashboard,
         "zone",
@@ -128,17 +137,31 @@ def _write_sample_twb(path: Path) -> None:
     etree.SubElement(
         root_zone,
         "zone",
-        attrib={"type": "worksheet", "name": "overview", "x": "0", "y": "0", "w": "100", "h": "100"},
+        attrib={
+            "type": "worksheet",
+            "name": "overview",
+            "x": "0",
+            "y": "0",
+            "w": "100",
+            "h": "100",
+        },
     )
     actions = etree.SubElement(dashboard, "actions")
     etree.SubElement(
         actions,
         "action",
-        attrib={"type": "filter", "name": "FilterByRegion", "field": "[Region]", "target-sheet": "Overview"},
+        attrib={
+            "type": "filter",
+            "name": "FilterByRegion",
+            "field": "[Region]",
+            "target-sheet": "Overview",
+        },
     )
 
     path.write_text(
-        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8"),
+        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode(
+            "utf-8"
+        ),
         encoding="utf-8",
     )
 
@@ -256,7 +279,12 @@ def _write_lineage_twb(path: Path) -> None:
     etree.SubElement(
         columns,
         "column",
-        attrib={"name": "sales_id", "caption": "Sales ID", "datatype": "integer", "role": "dimension"},
+        attrib={
+            "name": "sales_id",
+            "caption": "Sales ID",
+            "datatype": "integer",
+            "role": "dimension",
+        },
     )
     etree.SubElement(
         columns,
@@ -273,13 +301,17 @@ def _write_lineage_twb(path: Path) -> None:
         "column",
         attrib={"name": "gross", "caption": "Gross Profit", "datatype": "real", "role": "measure"},
     )
-    etree.SubElement(base, "calculation", attrib={"class": "tableau", "formula": "[Sales].[Revenue] - [Cost]"})
+    etree.SubElement(
+        base, "calculation", attrib={"class": "tableau", "formula": "[Sales].[Revenue] - [Cost]"}
+    )
     derived = etree.SubElement(
         columns,
         "column",
         attrib={"name": "margin", "caption": "Margin", "datatype": "real", "role": "measure"},
     )
-    etree.SubElement(derived, "calculation", attrib={"class": "tableau", "formula": "[Gross Profit] / [Cost]"})
+    etree.SubElement(
+        derived, "calculation", attrib={"class": "tableau", "formula": "[Gross Profit] / [Cost]"}
+    )
 
     worksheets = etree.SubElement(workbook, "worksheets")
     etree.SubElement(worksheets, "worksheet", name="Overview")
@@ -288,7 +320,9 @@ def _write_lineage_twb(path: Path) -> None:
     etree.SubElement(dashboards, "dashboard", name="Dashboard")
 
     path.write_text(
-        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode("utf-8"),
+        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode(
+            "utf-8"
+        ),
         encoding="utf-8",
     )
 

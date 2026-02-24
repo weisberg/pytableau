@@ -49,11 +49,13 @@ class WorkbookCatalog:
         # Collect all field names referenced in worksheet XML text
         referenced: set[str] = set()
         import re
+
         ref_re = re.compile(r"\[([^\]]+)\]")
         for ws in self.workbook.worksheets:
             text = ""
             try:
                 from lxml import etree
+
                 text = etree.tostring(ws.xml_node, encoding="unicode")
             except Exception:
                 pass
@@ -86,6 +88,7 @@ class WorkbookCatalog:
     def orphaned_calcs(self) -> list:
         """Calculated fields whose [refs] don't resolve to any known field."""
         import re
+
         ref_re = re.compile(r"\[([^\]]+)\]")
         all_captions: set[str] = set()
         for ds in self.workbook.datasources:
@@ -114,15 +117,17 @@ class WorkbookCatalog:
         for ds in self.workbook.datasources:
             for conn in ds.connections:
                 has_password = "password" in conn.xml_node.attrib
-                result.append({
-                    "datasource": ds.name,
-                    "class": conn.class_,
-                    "server": conn.server,
-                    "dbname": conn.dbname,
-                    "username": conn.username,
-                    "port": conn.port,
-                    "has_password": has_password,
-                })
+                result.append(
+                    {
+                        "datasource": ds.name,
+                        "class": conn.class_,
+                        "server": conn.server,
+                        "dbname": conn.dbname,
+                        "username": conn.username,
+                        "port": conn.port,
+                        "has_password": has_password,
+                    }
+                )
         return result
 
     def to_dict(self) -> dict:

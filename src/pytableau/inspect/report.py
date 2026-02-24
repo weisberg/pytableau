@@ -98,7 +98,9 @@ class WorkbookReport:
         lines.append("## Dashboards")
         for dashboard in self.workbook.dashboards:
             lines.append(f"- **{dashboard.name}**")
-            lines.append(f"  - Size: `{dashboard.size.width}x{dashboard.size.height}` ({dashboard.size.type})")
+            lines.append(
+                f"  - Size: `{dashboard.size.width}x{dashboard.size.height}` ({dashboard.size.type})"
+            )
             lines.append(f"  - Zones: {len(dashboard.zones)}")
             lines.append(f"  - Actions: {len(dashboard.actions)}")
 

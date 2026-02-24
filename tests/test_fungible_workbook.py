@@ -151,7 +151,8 @@ def test_rename_field_updates_canonical_xml_definition():
     # <datasource-dependencies> copies are advisory and may still carry the
     # old name.
     federated_ds = next(
-        el for el in tree.getroot().findall(".//datasources/datasource")
+        el
+        for el in tree.getroot().findall(".//datasources/datasource")
         if (el.get("name") or "").startswith("federated.")
     )
     canonical_captions = {

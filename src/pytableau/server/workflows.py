@@ -75,9 +75,12 @@ def refresh_workbook(
     **auth: object,
 ) -> Workbook:
     """Download, mutate, republish, and return the local modified workbook."""
-    with ServerClient(server, **auth) as client, Workbook.open(
-        client.download_workbook(workbook_id, destination=destination, **auth)
-    ) as workbook:
+    with (
+        ServerClient(server, **auth) as client,
+        Workbook.open(
+            client.download_workbook(workbook_id, destination=destination, **auth)
+        ) as workbook,
+    ):
         modifier(workbook)
         workbook.save_as(destination)
         client.publish_workbook(

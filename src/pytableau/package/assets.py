@@ -8,9 +8,7 @@ import zipfile
 from dataclasses import dataclass
 from pathlib import Path
 
-IMAGE_EXTS: frozenset[str] = frozenset(
-    {".png", ".jpg", ".jpeg", ".gif", ".svg", ".bmp"}
-)
+IMAGE_EXTS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".gif", ".svg", ".bmp"})
 
 
 @dataclass(frozen=True)
@@ -94,15 +92,14 @@ def add_asset(
     asset_path = Path(asset_path)
     archive_name = dest_name or f"Image/{asset_path.name}"
 
-    with tempfile.NamedTemporaryFile(
-        suffix=".twbx", delete=False, dir=twbx_path.parent
-    ) as tmp:
+    with tempfile.NamedTemporaryFile(suffix=".twbx", delete=False, dir=twbx_path.parent) as tmp:
         tmp_path = Path(tmp.name)
 
     try:
-        with zipfile.ZipFile(str(twbx_path), "r") as src_zf, zipfile.ZipFile(
-            str(tmp_path), "w", compression=zipfile.ZIP_DEFLATED
-        ) as dst_zf:
+        with (
+            zipfile.ZipFile(str(twbx_path), "r") as src_zf,
+            zipfile.ZipFile(str(tmp_path), "w", compression=zipfile.ZIP_DEFLATED) as dst_zf,
+        ):
             for item in src_zf.infolist():
                 dst_zf.writestr(item, src_zf.read(item.filename))
             dst_zf.write(str(asset_path), archive_name)

@@ -107,9 +107,7 @@ class ExtractManager:
 
         conn = datasource.connections[0]
         if getattr(conn, "class_", None) != "hyper":
-            issues.append(
-                f"Connection class is {conn.class_!r}, expected 'hyper'."
-            )
+            issues.append(f"Connection class is {conn.class_!r}, expected 'hyper'.")
 
         hyper_path = getattr(datasource, "_hyper_path", None)
         if hyper_path is None:
@@ -127,9 +125,7 @@ class ExtractManager:
                     for record in records:
                         local = (record.local_name or "").strip("[]")
                         if local and local not in schema_cols:
-                            issues.append(
-                                f"Metadata record [{local}] not found in .hyper schema."
-                            )
+                            issues.append(f"Metadata record [{local}] not found in .hyper schema.")
                 except Exception as exc:
                     issues.append(f"Cannot read .hyper schema: {exc}")
 
@@ -193,7 +189,9 @@ class ExtractManager:
             metadata_parent.remove(child)
 
         for index, field_name in enumerate(df.columns, start=1):
-            record = etree.SubElement(metadata_parent, "metadata-record", attrib={"class": "column"})
+            record = etree.SubElement(
+                metadata_parent, "metadata-record", attrib={"class": "column"}
+            )
             values = (
                 ("remote-name", str(field_name)),
                 ("remote-type", pandas_to_hyper_remote_type(df[field_name].dtype)),

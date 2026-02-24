@@ -59,6 +59,7 @@ def _collect_top_level(parent: etree._Element, tag: str) -> list[etree._Element]
 # Lazy sentinel collections for streaming mode (#61)
 # ---------------------------------------------------------------------------
 
+
 class _LazyWorksheetCollection:
     """Placeholder collection that raises when accessed in streaming mode."""
 
@@ -69,20 +70,14 @@ class _LazyWorksheetCollection:
         )
 
     def __len__(self) -> int:
-        raise LazyNotMaterializedError(
-            "Worksheets are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Worksheets are not loaded in streaming mode.")
 
     def __getitem__(self, key):
-        raise LazyNotMaterializedError(
-            "Worksheets are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Worksheets are not loaded in streaming mode.")
 
     @property
     def names(self) -> list[str]:
-        raise LazyNotMaterializedError(
-            "Worksheets are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Worksheets are not loaded in streaming mode.")
 
 
 class _LazyDashboardCollection:
@@ -95,25 +90,20 @@ class _LazyDashboardCollection:
         )
 
     def __len__(self) -> int:
-        raise LazyNotMaterializedError(
-            "Dashboards are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Dashboards are not loaded in streaming mode.")
 
     def __getitem__(self, key):
-        raise LazyNotMaterializedError(
-            "Dashboards are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Dashboards are not loaded in streaming mode.")
 
     @property
     def names(self) -> list[str]:
-        raise LazyNotMaterializedError(
-            "Dashboards are not loaded in streaming mode."
-        )
+        raise LazyNotMaterializedError("Dashboards are not loaded in streaming mode.")
 
 
 # ---------------------------------------------------------------------------
 # swap_connection result type (#79)
 # ---------------------------------------------------------------------------
+
 
 class SwapResult(NamedTuple):
     updated_count: int
@@ -124,6 +114,7 @@ class SwapResult(NamedTuple):
 # ---------------------------------------------------------------------------
 # Workbook
 # ---------------------------------------------------------------------------
+
 
 class Workbook:
     """Top-level entry point for all pytableau operations."""
@@ -290,7 +281,9 @@ class Workbook:
     @classmethod
     def from_template(cls, template: str | Path, **kwargs: object) -> Workbook:
         """Construct a workbook from a built-in or custom template."""
-        template_path = Path(template).expanduser() if isinstance(template, Path) else Path(str(template))
+        template_path = (
+            Path(template).expanduser() if isinstance(template, Path) else Path(str(template))
+        )
         if not template_path.suffix:
             template_path = get_template_path(str(template))
         elif template_path.suffix.lower() != ".twb":
@@ -302,7 +295,9 @@ class Workbook:
         try:
             tree = etree.parse(str(template_path))
         except (OSError, etree.XMLSyntaxError) as exc:
-            raise InvalidWorkbookError(f"Unable to parse template workbook: {template_path}") from exc
+            raise InvalidWorkbookError(
+                f"Unable to parse template workbook: {template_path}"
+            ) from exc
 
         wb = cls()
         wb._template_engine = TemplateEngine(tree)
@@ -377,6 +372,7 @@ class Workbook:
     def complexity_report(self, config=None):
         """Analyze workbook complexity and return a :class:`ComplexityReport`."""
         from pytableau.inspect.complexity import analyze_complexity
+
         return analyze_complexity(self, config)
 
     def auto_fix(self, rules=None, dry_run: bool = False) -> list:
@@ -390,6 +386,7 @@ class Workbook:
             List of :class:`FixAction` describing all changes.
         """
         from pytableau.xml.fixers import _ALL_FIXERS
+
         fixers = rules if rules is not None else _ALL_FIXERS
         return [action for fixer in fixers for action in fixer.fix(self, dry_run=dry_run)]
 
@@ -458,13 +455,15 @@ class Workbook:
                     )
                     if old_val == new_val:
                         continue
-                    changes.append(PromotionChange(
-                        datasource=ds.name,
-                        connection=idx,
-                        attribute=attr,
-                        old_value=old_val,
-                        new_value=new_val,
-                    ))
+                    changes.append(
+                        PromotionChange(
+                            datasource=ds.name,
+                            connection=idx,
+                            attribute=attr,
+                            old_value=old_val,
+                            new_value=new_val,
+                        )
+                    )
                     if not dry_run:
                         conn.xml_node.set(attr, new_val)
 
@@ -616,6 +615,7 @@ class Workbook:
             added/removed/modified datasources, fields, and worksheets.
         """
         from pytableau.inspect.diff import diff_workbooks
+
         return diff_workbooks(self, other)
 
     def apply(self, patch: Patch, *, validate: bool = True) -> int:
@@ -631,6 +631,7 @@ class Workbook:
             Number of ops successfully applied.
         """
         from pytableau.inspect.diff import apply_patch
+
         return apply_patch(self, patch, validate=validate)
 
     def git_clean(self) -> None:
@@ -639,6 +640,7 @@ class Workbook:
         Requires that the workbook was opened from or saved to a ``.twb`` file.
         """
         from pytableau.xml.canonical import git_clean as _gc
+
         if self._path is None:
             raise ValueError("Workbook has no source path; save to a .twb file first.")
         _gc(self._path)
@@ -650,6 +652,7 @@ class Workbook:
         enable human-readable field/connection diffs.
         """
         from pytableau.xml.canonical import to_json
+
         return to_json(self)
 
     # ------------------------------------------------------------------
@@ -690,6 +693,7 @@ class Workbook:
         dest = Path(path).expanduser()
         dest.parent.mkdir(parents=True, exist_ok=True)
         from lxml import etree as _etree
+
         dest.write_bytes(
             _etree.tostring(root, encoding="utf-8", xml_declaration=True, pretty_print=True)
         )

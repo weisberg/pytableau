@@ -10,7 +10,9 @@ if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
 
 _LOD_RE = re.compile(r"\b(FIXED|INCLUDE|EXCLUDE)\b", re.IGNORECASE)
-_NESTED_LOD_RE = re.compile(r"\b(FIXED|INCLUDE|EXCLUDE)\b.*\b(FIXED|INCLUDE|EXCLUDE)\b", re.IGNORECASE | re.DOTALL)
+_NESTED_LOD_RE = re.compile(
+    r"\b(FIXED|INCLUDE|EXCLUDE)\b.*\b(FIXED|INCLUDE|EXCLUDE)\b", re.IGNORECASE | re.DOTALL
+)
 
 
 @dataclass
@@ -51,7 +53,9 @@ def _grade(score: int) -> str:
     return "F"
 
 
-def analyze_complexity(workbook: Workbook, config: ComplexityConfig | None = None) -> ComplexityReport:
+def analyze_complexity(
+    workbook: Workbook, config: ComplexityConfig | None = None
+) -> ComplexityReport:
     """Analyze the complexity of *workbook* and return a :class:`ComplexityReport`."""
     cfg = config or ComplexityConfig()
 

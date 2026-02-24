@@ -38,8 +38,11 @@ def test_strict_mode_rejects_non_workbook_root(tmp_path: Path) -> None:
 def test_compatibility_mode_warns_on_non_workbook_root(tmp_path: Path) -> None:
     """compatibility=True should warn (not raise) on non-workbook root."""
     bad_xml = tmp_path / "compat.twb"
-    bad_xml.write_text('<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8")
+    bad_xml.write_text(
+        '<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8"
+    )
     import warnings
+
     with warnings.catch_warnings(record=True):
         wb = Workbook.open(bad_xml, compatibility=True)
     assert wb is not None
@@ -173,8 +176,12 @@ def test_twbx_with_two_twbs_raises_ambiguous(tmp_path: Path) -> None:
 
 def test_twb_hint_resolves_ambiguity(tmp_path: Path) -> None:
     """twb_hint resolves ambiguous multi-TWB archives."""
-    content_a = b'<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" source-platform="win" />'
-    content_b = b'<?xml version="1.0"?><workbook source-build="20222.22.0614.2200" source-platform="mac" />'
+    content_a = (
+        b'<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" source-platform="win" />'
+    )
+    content_b = (
+        b'<?xml version="1.0"?><workbook source-build="20222.22.0614.2200" source-platform="mac" />'
+    )
     archive = tmp_path / "hinted.twbx"
     with zipfile.ZipFile(archive, "w") as zf:
         zf.writestr("first.twb", content_a)

@@ -50,8 +50,7 @@ def _canon_ds(ds: Any) -> dict[str, Any]:
         "caption": ds.caption,
         "connections": [_canon_conn(c) for c in ds.connections],
         "fields": {
-            f.caption: _canon_field(f)
-            for f in sorted(ds.fields, key=lambda x: x.caption or "")
+            f.caption: _canon_field(f) for f in sorted(ds.fields, key=lambda x: x.caption or "")
         },
         "calculated_fields": {
             f.caption: (f.formula or "")

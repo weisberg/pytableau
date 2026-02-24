@@ -172,9 +172,11 @@ class ParseError(Exception):
 # Transformer
 # ---------------------------------------------------------------------------
 
+
 def _build_transformer():
     """Build the lark Transformer that converts parse trees to AST nodes."""
     from lxml import etree  # noqa: F401 (just ensure lxml available)
+
     try:
         from lark import Transformer
     except ImportError as exc:
@@ -184,26 +186,60 @@ def _build_transformer():
 
     class _T(Transformer):
         # Operators
-        def or_op(self, args): return BinOp("OR", args[0], args[1])
-        def and_op(self, args): return BinOp("AND", args[0], args[1])
-        def not_op(self, args): return UnaryOp("NOT", args[0])
-        def eq_op(self, args): return BinOp("=", args[0], args[1])
-        def neq_op(self, args): return BinOp("!=", args[0], args[1])
-        def lt_op(self, args): return BinOp("<", args[0], args[1])
-        def lte_op(self, args): return BinOp("<=", args[0], args[1])
-        def gt_op(self, args): return BinOp(">", args[0], args[1])
-        def gte_op(self, args): return BinOp(">=", args[0], args[1])
-        def add_op(self, args): return BinOp("+", args[0], args[1])
-        def sub_op(self, args): return BinOp("-", args[0], args[1])
-        def mul_op(self, args): return BinOp("*", args[0], args[1])
-        def div_op(self, args): return BinOp("/", args[0], args[1])
-        def mod_op(self, args): return BinOp("%", args[0], args[1])
-        def neg_op(self, args): return UnaryOp("-", args[0])
-        def pos_op(self, args): return UnaryOp("+", args[0])
+        def or_op(self, args):
+            return BinOp("OR", args[0], args[1])
+
+        def and_op(self, args):
+            return BinOp("AND", args[0], args[1])
+
+        def not_op(self, args):
+            return UnaryOp("NOT", args[0])
+
+        def eq_op(self, args):
+            return BinOp("=", args[0], args[1])
+
+        def neq_op(self, args):
+            return BinOp("!=", args[0], args[1])
+
+        def lt_op(self, args):
+            return BinOp("<", args[0], args[1])
+
+        def lte_op(self, args):
+            return BinOp("<=", args[0], args[1])
+
+        def gt_op(self, args):
+            return BinOp(">", args[0], args[1])
+
+        def gte_op(self, args):
+            return BinOp(">=", args[0], args[1])
+
+        def add_op(self, args):
+            return BinOp("+", args[0], args[1])
+
+        def sub_op(self, args):
+            return BinOp("-", args[0], args[1])
+
+        def mul_op(self, args):
+            return BinOp("*", args[0], args[1])
+
+        def div_op(self, args):
+            return BinOp("/", args[0], args[1])
+
+        def mod_op(self, args):
+            return BinOp("%", args[0], args[1])
+
+        def neg_op(self, args):
+            return UnaryOp("-", args[0])
+
+        def pos_op(self, args):
+            return UnaryOp("+", args[0])
 
         # Field references
-        def field_ref_simple(self, args): return FieldRef(name=str(args[0]))
-        def field_ref_ds(self, args): return FieldRef(datasource=str(args[0]), name=str(args[1]))
+        def field_ref_simple(self, args):
+            return FieldRef(name=str(args[0]))
+
+        def field_ref_ds(self, args):
+            return FieldRef(datasource=str(args[0]), name=str(args[1]))
 
         # Function call
         def func_call(self, args):
@@ -211,7 +247,8 @@ def _build_transformer():
             arg_list = args[1] if len(args) > 1 else []
             return FuncCall(name=name, args=arg_list)
 
-        def arg_list(self, args): return list(args)
+        def arg_list(self, args):
+            return list(args)
 
         # IF expression
         def if_expr(self, args):
@@ -234,8 +271,7 @@ def _build_transformer():
             if idx < len(remaining):
                 else_expr = remaining[idx]
             return IfExpr(
-                condition=cond, then_expr=then,
-                elseif_clauses=elseif_clauses, else_expr=else_expr
+                condition=cond, then_expr=then, elseif_clauses=elseif_clauses, else_expr=else_expr
             )
 
         # CASE expression
@@ -258,23 +294,60 @@ def _build_transformer():
             return CaseExpr(subject=subject, when_clauses=when_clauses, else_expr=else_expr)
 
         # LOD expressions
-        def field_list(self, args): return list(args)
+        def field_list(self, args):
+            return list(args)
 
-        def lod_fixed(self, args): return LodExpr("FIXED", dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]], body=args[1])
-        def lod_include(self, args): return LodExpr("INCLUDE", dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]], body=args[1])
-        def lod_exclude(self, args): return LodExpr("EXCLUDE", dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]], body=args[1])
-        def lod_fixed_no_dims(self, args): return LodExpr("FIXED", dimensions=[], body=args[0])
-        def lod_include_no_dims(self, args): return LodExpr("INCLUDE", dimensions=[], body=args[0])
-        def lod_exclude_no_dims(self, args): return LodExpr("EXCLUDE", dimensions=[], body=args[0])
+        def lod_fixed(self, args):
+            return LodExpr(
+                "FIXED",
+                dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]],
+                body=args[1],
+            )
+
+        def lod_include(self, args):
+            return LodExpr(
+                "INCLUDE",
+                dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]],
+                body=args[1],
+            )
+
+        def lod_exclude(self, args):
+            return LodExpr(
+                "EXCLUDE",
+                dimensions=list(args[0]) if isinstance(args[0], list) else [args[0]],
+                body=args[1],
+            )
+
+        def lod_fixed_no_dims(self, args):
+            return LodExpr("FIXED", dimensions=[], body=args[0])
+
+        def lod_include_no_dims(self, args):
+            return LodExpr("INCLUDE", dimensions=[], body=args[0])
+
+        def lod_exclude_no_dims(self, args):
+            return LodExpr("EXCLUDE", dimensions=[], body=args[0])
 
         # Literals
-        def float_lit(self, args): return NumberLiteral(float(args[0]))
-        def int_lit(self, args): return NumberLiteral(float(int(args[0])))
-        def dq_string(self, args): return StringLiteral(str(args[0])[1:-1])  # strip quotes
-        def sq_string(self, args): return StringLiteral(str(args[0])[1:-1])
-        def date_literal(self, args): return DateLiteral(str(args[0])[1:-1])  # strip #...#
-        def bool_literal(self, args): return BoolLiteral(str(args[0]).upper() == "TRUE")
-        def null_literal(self, args): return NullLiteral()
+        def float_lit(self, args):
+            return NumberLiteral(float(args[0]))
+
+        def int_lit(self, args):
+            return NumberLiteral(float(int(args[0])))
+
+        def dq_string(self, args):
+            return StringLiteral(str(args[0])[1:-1])  # strip quotes
+
+        def sq_string(self, args):
+            return StringLiteral(str(args[0])[1:-1])
+
+        def date_literal(self, args):
+            return DateLiteral(str(args[0])[1:-1])  # strip #...#
+
+        def bool_literal(self, args):
+            return BoolLiteral(str(args[0]).upper() == "TRUE")
+
+        def null_literal(self, args):
+            return NullLiteral()
 
         # field_ref (alias)
         def field_ref(self, args):

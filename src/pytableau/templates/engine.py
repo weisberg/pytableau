@@ -46,7 +46,7 @@ class TemplateEngine:
         return tokens
 
     def map_fields(self, mapping: dict[str, str], *, strict: bool = True) -> TemplateEngine:
-        """Replace placeholders with concrete field names.\n\n        Example: ``{\"__MEASURE__\": \"Sales\"}``.\n        """
+        """Replace placeholders with concrete field names.\n\n        Example: ``{\"__MEASURE__\": \"Sales\"}``.\n"""
         if any(not is_placeholder(key) for key in mapping):
             bad = [key for key in mapping if not is_placeholder(key)]
             raise ValueError(f"Invalid placeholder keys: {bad}")
@@ -60,7 +60,9 @@ class TemplateEngine:
             )
         return self
 
-    def replace_datasource_placeholders(self, mapping: dict[str, str], *, strict: bool = True) -> TemplateEngine:
+    def replace_datasource_placeholders(
+        self, mapping: dict[str, str], *, strict: bool = True
+    ) -> TemplateEngine:
         """Replace datasource placeholders in names/ids as part of template wiring."""
         if any(not is_placeholder(key) for key in mapping):
             bad = [key for key in mapping if not is_placeholder(key)]

@@ -84,10 +84,10 @@ class Filter(XMLNodeProxy):
             self.field = field
 
     @classmethod
-    def from_xml(
-        cls, node: etree._Element, raw_type: str | None = None
-    ) -> Filter:
-        discovered = _normalise_filter_type(raw_type or node.get("class", FilterType.WILDCARD.value))
+    def from_xml(cls, node: etree._Element, raw_type: str | None = None) -> Filter:
+        discovered = _normalise_filter_type(
+            raw_type or node.get("class", FilterType.WILDCARD.value)
+        )
         if discovered == FilterType.CATEGORICAL.value:
             return CategoricalFilter(node)
         if discovered in {FilterType.RANGE.value, FilterType.QUANTITATIVE.value}:

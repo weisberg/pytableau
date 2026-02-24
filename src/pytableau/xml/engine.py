@@ -107,9 +107,7 @@ class XMLSchemaEngine:
                 continue
             for child in node.iterchildren():
                 issues.extend(
-                    self.validate_element(
-                        child.tag, node.tag, dict(child.attrib), self.version
-                    )
+                    self.validate_element(child.tag, node.tag, dict(child.attrib), self.version)
                 )
 
         source_build = root.attrib.get("source-build")

@@ -33,7 +33,7 @@ def test_list_custom_sql_returns_list() -> None:
     xml = (
         '<datasource name="test">'
         '<relation type="text" name="Custom"><![CDATA[SELECT * FROM sales]]></relation>'
-        '</datasource>'
+        "</datasource>"
     )
     root = etree.fromstring(xml.encode())
     ds = Datasource(root)

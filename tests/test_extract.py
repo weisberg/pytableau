@@ -10,7 +10,9 @@ from pytableau.core.workbook import Workbook
 
 pytest.importorskip("pandas", reason="pandas is required for extract lifecycle tests")
 pytest.importorskip("pantab", reason="pantab is required for extract lifecycle tests")
-pytest.importorskip("tableauhyperapi", reason="tableauhyperapi is required for extract lifecycle tests")
+pytest.importorskip(
+    "tableauhyperapi", reason="tableauhyperapi is required for extract lifecycle tests"
+)
 pytestmark = [pytest.mark.requires_hyper]
 
 

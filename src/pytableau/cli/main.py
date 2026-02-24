@@ -115,9 +115,7 @@ def validate(
     return {
         "path": str(workbook),
         "issue_count": len(issues),
-        "issues": [
-            {"level": i.level, "message": i.message, "path": i.path} for i in issues
-        ],
+        "issues": [{"level": i.level, "message": i.message, "path": i.path} for i in issues],
     }
 
 
@@ -149,6 +147,7 @@ def diff(
     # XML structural diff
     try:
         from pytableau.xml.differ import xml_diff
+
         diff_lines = xml_diff(before, after)
     except Exception:
         # Fallback to simple set diff if paths don't resolve to plain .twb
@@ -165,8 +164,12 @@ def diff(
             "removed": removed,
         }
 
-    added = [ln.rstrip("\n") for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++")]
-    removed = [ln.rstrip("\n") for ln in diff_lines if ln.startswith("-") and not ln.startswith("---")]
+    added = [
+        ln.rstrip("\n") for ln in diff_lines if ln.startswith("+") and not ln.startswith("+++")
+    ]
+    removed = [
+        ln.rstrip("\n") for ln in diff_lines if ln.startswith("-") and not ln.startswith("---")
+    ]
     return {
         "before": str(before),
         "after": str(after),
@@ -217,9 +220,7 @@ def lineage(
 @app.command(annotations=ReadOnly | Idempotent)
 def report(
     workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
-    output: Annotated[
-        Path | None, Option(help="Write markdown to this file path")
-    ] = None,
+    output: Annotated[Path | None, Option(help="Write markdown to this file path")] = None,
 ) -> dict:
     """Generate markdown documentation for the workbook."""
     from pytableau.core.workbook import Workbook
@@ -264,7 +265,11 @@ def swap_connection(
     from pytableau.core.workbook import Workbook
 
     destination = output or workbook
-    record_dry_action("swap_connection", str(workbook), details={"server": server, "db": db, "output": str(destination)})
+    record_dry_action(
+        "swap_connection",
+        str(workbook),
+        details={"server": server, "db": db, "output": str(destination)},
+    )
 
     try:
         wb = Workbook.open(workbook)
@@ -443,9 +448,7 @@ def template_list() -> list[dict]:
 def template_apply(
     template: Annotated[str, Argument(help="Template name or path to .twb file")],
     output: Annotated[Path, Option("-o", help="Output path for the generated workbook")],
-    fields: Annotated[
-        list[str] | None, Option(help="KEY=VALUE field mappings")
-    ] = None,
+    fields: Annotated[list[str] | None, Option(help="KEY=VALUE field mappings")] = None,
 ) -> dict:
     """Apply a template with field mappings and write output workbook."""
     from pytableau.core.workbook import Workbook
@@ -485,9 +488,7 @@ def publish(
     server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
     project: Annotated[str, Option(help="Target project name or ID")],
     token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
-    token_secret: Annotated[
-        str | None, Option(help="Personal access token secret")
-    ] = None,
+    token_secret: Annotated[str | None, Option(help="Personal access token secret")] = None,
 ) -> dict:
     """Publish a workbook to Tableau Server or Tableau Cloud."""
     from pytableau.core.workbook import Workbook
@@ -574,7 +575,9 @@ def promote(
     workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
     from_env: Annotated[str, Option("--from-env", help="Source environment name")],
     to_env: Annotated[str, Option("--to-env", help="Target environment name")],
-    config_file: Annotated[Path, Option("--config-file", help="Path to promotion config YAML/JSON")],
+    config_file: Annotated[
+        Path, Option("--config-file", help="Path to promotion config YAML/JSON")
+    ],
     output: Annotated[
         Path | None, Option("-o", help="Output path (default: overwrite input)")
     ] = None,
@@ -596,6 +599,7 @@ def promote(
             cfg = PromotionConfig.from_yaml(str(config_file))
         else:
             import json
+
             cfg = PromotionConfig.from_dict(json.loads(config_file.read_text()))
     except Exception as exc:
         raise InputError(f"Failed to load promotion config: {exc}") from exc
@@ -645,6 +649,7 @@ def to_json(
         output.write_text(json_str, encoding="utf-8")
 
     import json as _json
+
     return {
         "path": str(workbook),
         "output": str(output) if output else None,
@@ -689,7 +694,9 @@ def patch(
     from pytableau.inspect.diff import Patch
 
     destination = output or workbook
-    record_dry_action("patch", str(workbook), details={"patch_file": str(patch_file), "output": str(destination)})
+    record_dry_action(
+        "patch", str(workbook), details={"patch_file": str(patch_file), "output": str(destination)}
+    )
 
     try:
         patch_obj = Patch.from_dict(_json.loads(patch_file.read_text()))
@@ -784,9 +791,7 @@ def server_list(
     server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
     project: Annotated[str | None, Option(help="Filter by project ID")] = None,
     token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
-    token_secret: Annotated[
-        str | None, Option(help="Personal access token secret")
-    ] = None,
+    token_secret: Annotated[str | None, Option(help="Personal access token secret")] = None,
 ) -> dict:
     """List workbooks on a Tableau Server or Cloud instance."""
     from pytableau.server.client import ServerClient
@@ -816,9 +821,7 @@ def download(
     server: Annotated[str, Option(help="Tableau Server or Cloud URL")],
     output: Annotated[Path, Option("-o", help="Local path to save downloaded workbook")],
     token_name: Annotated[str | None, Option(help="Personal access token name")] = None,
-    token_secret: Annotated[
-        str | None, Option(help="Personal access token secret")
-    ] = None,
+    token_secret: Annotated[str | None, Option(help="Personal access token secret")] = None,
 ) -> dict:
     """Download a workbook from Tableau Server or Cloud."""
     from pytableau.core.workbook import Workbook
@@ -870,17 +873,16 @@ def governance_lint(
     except PyTableauError as exc:
         raise _map_error(exc) from exc
 
-    rs = GovernanceRuleset.from_yaml(ruleset) if ruleset is not None else GovernanceRuleset.default()
+    rs = (
+        GovernanceRuleset.from_yaml(ruleset) if ruleset is not None else GovernanceRuleset.default()
+    )
     issues = lint_with_ruleset(wb, rs)
 
     result = {
         "path": str(workbook),
         "passed": not any(i.severity == "error" for i in issues),
         "issue_count": len(issues),
-        "issues": [
-            {"rule": i.rule, "severity": i.severity, "message": i.message}
-            for i in issues
-        ],
+        "issues": [{"rule": i.rule, "severity": i.severity, "message": i.message} for i in issues],
     }
 
     if exit_code and not result["passed"]:
@@ -914,9 +916,7 @@ def index_workbooks(
 def search_index(
     term: Annotated[str, Argument(help="Search term")],
     db: Annotated[Path, Option("--db", help="SQLite database path")] = Path("pytableau.db"),
-    kind: Annotated[
-        str, Option("--kind", help="Search kind: 'field' or 'connection'")
-    ] = "field",
+    kind: Annotated[str, Option("--kind", help="Search kind: 'field' or 'connection'")] = "field",
 ) -> list:
     """Search a workbook index for fields or connections."""
     from pytableau.governance.index import WorkbookIndex

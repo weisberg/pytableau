@@ -304,9 +304,7 @@ class Worksheet(XMLNodeProxy):
         target = _normalise_ref(field)
         if self.datasource_dependencies:
             datasources = [
-                ds
-                for ds in self._workbook.datasources
-                if ds.name in self.datasource_dependencies
+                ds for ds in self._workbook.datasources if ds.name in self.datasource_dependencies
             ]
             if not datasources:
                 datasources = list(self._workbook.datasources)

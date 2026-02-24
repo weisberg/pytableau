@@ -197,7 +197,7 @@ def test_validate_workbook_with_unknown_tag_no_error(tmp_path: Path) -> None:
         '<?xml version="1.0"?>'
         '<workbook source-build="20241.24.0320.0919">'
         '<datasources><datasource name="x"><my-custom-node /></datasource></datasources>'
-        '</workbook>'
+        "</workbook>"
     )
     tree = etree.fromstring(xml.encode())
     etree_tree = tree.getroottree()

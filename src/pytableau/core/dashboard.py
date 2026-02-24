@@ -24,7 +24,7 @@ class DashboardSize:
 
 @dataclass
 class DeviceLayout:
-    device_name: str   # "phone", "tablet", "desktop"
+    device_name: str  # "phone", "tablet", "desktop"
     sizing: str | None
     zones: list[Zone]
 
@@ -67,7 +67,10 @@ class Action:
     def replace_field_reference(self, old: str, new: str) -> None:
         old_norm = _normalise_field_name(old)
         new_token = _normalise_field_name(new)
-        if self.xml_node.get("field") and _normalise_field_name(self.xml_node.get("field", "")) == old_norm:
+        if (
+            self.xml_node.get("field")
+            and _normalise_field_name(self.xml_node.get("field", "")) == old_norm
+        ):
             self.xml_node.set("field", f"[{new_token}]")
         for node in self.xml_node.findall("field"):
             if _normalise_field_name(node.get("name", node.text or "")) == old_norm:
@@ -78,7 +81,10 @@ class Action:
 
     def remove_field_reference(self, field: str) -> None:
         target = _normalise_field_name(field)
-        if self.xml_node.get("field") and _normalise_field_name(self.xml_node.get("field") or "") == target:
+        if (
+            self.xml_node.get("field")
+            and _normalise_field_name(self.xml_node.get("field") or "") == target
+        ):
             self.xml_node.attrib.pop("field", None)
         for node in self.xml_node.findall("field"):
             if _normalise_field_name(node.get("name", node.text or "")) == target:
@@ -151,7 +157,9 @@ class Dashboard(XMLNodeProxy):
         for action in actions_node.findall("action"):
             out.append(
                 Action(
-                    action_type=action.get("type") or action.get("class") or ActionType.FILTER.value,
+                    action_type=action.get("type")
+                    or action.get("class")
+                    or ActionType.FILTER.value,
                     name=action.get("name"),
                     target_sheet=action.get("target-sheet") or action.get("targetSheet"),
                     source_sheet=action.get("source-sheet") or action.get("sourceSheet"),

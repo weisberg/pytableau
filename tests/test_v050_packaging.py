@@ -27,10 +27,13 @@ def _make_twbx(tmp_path: Path, files: dict[str, bytes]) -> Path:
 
 
 def test_list_assets_excludes_twb(tmp_path: Path) -> None:
-    archive = _make_twbx(tmp_path, {
-        "Data/Extract.hyper": b"hyper",
-        "Data/Notes.txt": b"notes",
-    })
+    archive = _make_twbx(
+        tmp_path,
+        {
+            "Data/Extract.hyper": b"hyper",
+            "Data/Notes.txt": b"notes",
+        },
+    )
     pm = PackageManager(archive)
     assets = pm.list_assets()
     assert all(not a.endswith(".twb") for a in assets)
@@ -39,10 +42,13 @@ def test_list_assets_excludes_twb(tmp_path: Path) -> None:
 
 
 def test_list_assets_sorted(tmp_path: Path) -> None:
-    archive = _make_twbx(tmp_path, {
-        "z_last.csv": b"z",
-        "a_first.csv": b"a",
-    })
+    archive = _make_twbx(
+        tmp_path,
+        {
+            "z_last.csv": b"z",
+            "a_first.csv": b"a",
+        },
+    )
     pm = PackageManager(archive)
     assets = pm.list_assets()
     assert assets == sorted(assets)
@@ -50,17 +56,22 @@ def test_list_assets_sorted(tmp_path: Path) -> None:
 
 def test_list_assets_empty_for_twb(tmp_path: Path) -> None:
     twb = tmp_path / "workbook.twb"
-    twb.write_text('<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8")
+    twb.write_text(
+        '<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8"
+    )
     pm = PackageManager(twb)
     assert pm.list_assets() == []
 
 
 def test_glob_pattern_match(tmp_path: Path) -> None:
-    archive = _make_twbx(tmp_path, {
-        "Data/sales.hyper": b"h",
-        "Data/orders.hyper": b"h",
-        "readme.txt": b"r",
-    })
+    archive = _make_twbx(
+        tmp_path,
+        {
+            "Data/sales.hyper": b"h",
+            "Data/orders.hyper": b"h",
+            "readme.txt": b"r",
+        },
+    )
     pm = PackageManager(archive)
     # fnmatch '*' matches '/' so *.hyper matches full paths like Data/sales.hyper
     hypers = pm.glob("*.hyper")
@@ -125,7 +136,9 @@ def test_save_as_deterministic(tmp_path: Path) -> None:
 
 def test_resolve_clean_path(tmp_path: Path) -> None:
     twb = tmp_path / "wb.twb"
-    twb.write_text('<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8")
+    twb.write_text(
+        '<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8"
+    )
     pm = PackageManager(twb)
     assert pm.resolve("Data/sales.hyper") == "Data/sales.hyper"
     assert pm.resolve("/Data/sales.hyper") == "Data/sales.hyper"
@@ -133,7 +146,9 @@ def test_resolve_clean_path(tmp_path: Path) -> None:
 
 def test_resolve_rejects_parent_traversal(tmp_path: Path) -> None:
     twb = tmp_path / "wb.twb"
-    twb.write_text('<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8")
+    twb.write_text(
+        '<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8"
+    )
     pm = PackageManager(twb)
     with pytest.raises(InvalidPathError):
         pm.resolve("../etc/passwd")
@@ -141,7 +156,9 @@ def test_resolve_rejects_parent_traversal(tmp_path: Path) -> None:
 
 def test_resolve_rejects_windows_drive(tmp_path: Path) -> None:
     twb = tmp_path / "wb.twb"
-    twb.write_text('<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8")
+    twb.write_text(
+        '<?xml version="1.0"?><workbook source-build="20241.24.0320.0919" />', encoding="utf-8"
+    )
     pm = PackageManager(twb)
     with pytest.raises(InvalidPathError):
         pm.resolve("C:/Users/secret.txt")
@@ -158,10 +175,10 @@ def _make_tds(tmp_path: Path, name: str = "Sales") -> Path:
         f'<?xml version="1.0" encoding="utf-8"?>'
         f'<datasource name="{name}" caption="{name}">'
         f'<connection class="sqlserver" server="dev.example.com" dbname="sales" />'
-        f'<columns>'
+        f"<columns>"
         f'<column name="[Revenue]" caption="Revenue" datatype="real" role="measure" type="quantitative" />'
-        f'</columns>'
-        f'</datasource>',
+        f"</columns>"
+        f"</datasource>",
         encoding="utf-8",
     )
     return path
@@ -195,7 +212,7 @@ def test_datasource_open_tdsx(tmp_path: Path) -> None:
         b'<?xml version="1.0" encoding="utf-8"?>'
         b'<datasource name="Orders" caption="Orders">'
         b'<connection class="postgres" server="db.example.com" dbname="orders" />'
-        b'</datasource>'
+        b"</datasource>"
     )
     tdsx = tmp_path / "Orders.tdsx"
     with zipfile.ZipFile(tdsx, "w") as zf:

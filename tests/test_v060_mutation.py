@@ -132,12 +132,12 @@ def test_whitespace_normalizer() -> None:
 
     xml = (
         '<datasource name="test">'
-        '<columns>'
+        "<columns>"
         '<column name="[C]" caption="C" datatype="real" role="measure" type="quantitative">'
         '<calculation class="tableau" formula="SUM([Sales])  /  COUNT([Orders])" />'
-        '</column>'
-        '</columns>'
-        '</datasource>'
+        "</column>"
+        "</columns>"
+        "</datasource>"
     )
     root = etree.fromstring(xml.encode())
 
@@ -161,12 +161,14 @@ def test_whitespace_normalizer() -> None:
 def test_promotion_config_from_dict() -> None:
     from pytableau.package.promotion import PromotionConfig
 
-    cfg = PromotionConfig.from_dict({
-        "environments": {
-            "dev": {"server": "dev.db", "dbname": "sales_dev"},
-            "prod": {"server": "prod.db", "dbname": "sales_prod", "port": 5432},
+    cfg = PromotionConfig.from_dict(
+        {
+            "environments": {
+                "dev": {"server": "dev.db", "dbname": "sales_dev"},
+                "prod": {"server": "prod.db", "dbname": "sales_prod", "port": 5432},
+            }
         }
-    })
+    )
     assert "dev" in cfg.environments
     assert "prod" in cfg.environments
     assert cfg.environments["prod"].server == "prod.db"
@@ -193,12 +195,14 @@ def test_promote_dry_run(minimal_twb: Path) -> None:
     from pytableau.core.workbook import Workbook
     from pytableau.package.promotion import PromotionConfig
 
-    cfg = PromotionConfig.from_dict({
-        "environments": {
-            "dev": {"server": "dev.example.com"},
-            "prod": {"server": "prod.example.com"},
+    cfg = PromotionConfig.from_dict(
+        {
+            "environments": {
+                "dev": {"server": "dev.example.com"},
+                "prod": {"server": "prod.example.com"},
+            }
         }
-    })
+    )
     wb = Workbook.open(minimal_twb)
     changes = wb.promote("dev", "prod", cfg, dry_run=True)
     assert isinstance(changes, list)
@@ -212,12 +216,14 @@ def test_promote_applies(minimal_twb: Path) -> None:
     from pytableau.core.workbook import Workbook
     from pytableau.package.promotion import PromotionConfig
 
-    cfg = PromotionConfig.from_dict({
-        "environments": {
-            "dev": {"server": "dev.example.com"},
-            "prod": {"server": "prod.example.com"},
+    cfg = PromotionConfig.from_dict(
+        {
+            "environments": {
+                "dev": {"server": "dev.example.com"},
+                "prod": {"server": "prod.example.com"},
+            }
         }
-    })
+    )
     wb = Workbook.open(minimal_twb)
     changes = wb.promote("dev", "prod", cfg, dry_run=False)
     # At least one connection updated

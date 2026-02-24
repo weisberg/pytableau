@@ -114,6 +114,7 @@ def test_save_as_template_does_not_modify_live_workbook():
 
     import os
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".twb", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:
@@ -155,6 +156,7 @@ def test_save_as_template_mapping_values_are_original_captions():
     wb = Workbook.open(FIXTURE_DIR / "single_datasource_v2023_1.twb")
     import os
     import tempfile
+
     with tempfile.NamedTemporaryFile(suffix=".twb", delete=False) as tmp:
         tmp_path = Path(tmp.name)
     try:

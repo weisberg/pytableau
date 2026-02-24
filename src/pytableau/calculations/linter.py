@@ -64,10 +64,7 @@ class LintContext:
 
 class LintRule(ABC):
     @abstractmethod
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
-        ...
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]: ...
 
 
 # ---------------------------------------------------------------------------
@@ -78,9 +75,7 @@ class LintRule(ABC):
 class UnknownFunctionRule(LintRule):
     """Warn when a formula calls a function not in the Tableau registry."""
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if ast is None:
             return []
         issues = []
@@ -100,9 +95,7 @@ class UnknownFunctionRule(LintRule):
 class ExcessiveLodNestingRule(LintRule):
     """Flag LOD expressions nested more than 2 levels deep."""
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if ast is None:
             return []
         max_depth = _max_lod_depth(ast)
@@ -131,6 +124,7 @@ def _max_lod_depth(node: FormulaNode, current: int = 0) -> int:
     depths = [current]
     if hasattr(node, "__dataclass_fields__"):
         import dataclasses
+
         for f in dataclasses.fields(node):
             val = getattr(node, f.name)
             if isinstance(val, FormulaNode):
@@ -149,9 +143,7 @@ def _max_lod_depth(node: FormulaNode, current: int = 0) -> int:
 class NestedIfAntiPattern(LintRule):
     """Suggest CASE/WHEN for nested IF expressions."""
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if ast is None:
             return []
         issues = []
@@ -179,9 +171,7 @@ class NestedIfAntiPattern(LintRule):
 class DeprecatedFunctionRule(LintRule):
     """Error on use of deprecated functions (SCRIPT_REAL, RAWSQL_*, etc.)."""
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if ast is None:
             return []
         issues = []
@@ -206,9 +196,7 @@ class UnknownFieldReferenceRule(LintRule):
     Only active when ``ctx.all_field_captions`` is non-empty.
     """
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if ast is None or not ctx.all_field_captions:
             return []
         issues = []
@@ -237,9 +225,7 @@ class CyclicDependencyRule(LintRule):
     ``known_dependencies`` should map ``field_caption → set of field captions it uses``.
     """
 
-    def check(
-        self, formula: str, ast: FormulaNode | None, ctx: LintContext
-    ) -> list[LintIssue]:
+    def check(self, formula: str, ast: FormulaNode | None, ctx: LintContext) -> list[LintIssue]:
         if not ctx.known_dependencies or not ctx.field_caption:
             return []
         if _has_cycle(ctx.field_caption, ctx.known_dependencies):
@@ -338,9 +324,11 @@ def lint_workbook(workbook: Any, rules: list[LintRule] | None = None) -> list[Li
         dep_map: dict[str, set[str]] = {}
         for cf in ds.calculated_fields:
             from pytableau.calculations.parser import parse_safe
+
             ast = parse_safe(cf.formula or "")
             if ast is not None:
                 from pytableau.calculations.ast import FieldRef, find_nodes
+
                 refs = {n.name for n in find_nodes(ast, FieldRef)}
                 dep_map[cf.caption] = refs
 

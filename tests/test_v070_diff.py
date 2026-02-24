@@ -41,6 +41,7 @@ def test_git_clean_returns_string(tmp_path):
     src = FIXTURE_DIR / "minimal_v2022_4.twb"
     dst = tmp_path / "minimal.twb"
     import shutil
+
     shutil.copy(src, dst)
     result = git_clean(dst, in_place=False)
     assert isinstance(result, str)
@@ -76,9 +77,11 @@ def test_git_clean_in_place_false_does_not_write(tmp_path):
 
 def test_git_clean_in_place_true_writes(tmp_path):
     import shutil
+
     dst = tmp_path / "workbook.twb"
     shutil.copy(FIXTURE_DIR / "minimal_v2022_4.twb", dst)
     import time
+
     time.sleep(0.01)
     git_clean(dst, in_place=True)
     assert dst.exists()
@@ -188,8 +191,13 @@ def test_patch_from_diff_creates_ops():
 
 def test_patch_to_dict_roundtrip():
     ops = [
-        PatchOp(action=PatchAction.MODIFY_CONNECTION, target="datasource:foo/connection:0",
-                attribute="server", old_value="dev", new_value="prod")
+        PatchOp(
+            action=PatchAction.MODIFY_CONNECTION,
+            target="datasource:foo/connection:0",
+            attribute="server",
+            old_value="dev",
+            new_value="prod",
+        )
     ]
     p = Patch(ops=ops)
     d = p.to_dict()
@@ -238,6 +246,7 @@ def test_apply_patch_skips_missing_target():
     ]
     p = Patch(ops=ops)
     import warnings
+
     with warnings.catch_warnings(record=True):
         warnings.simplefilter("always")
         applied = apply_patch(wb, p, validate=False)
@@ -253,7 +262,9 @@ def test_xml_diff_identical_files_empty():
     src = FIXTURE_DIR / "minimal_v2022_4.twb"
     lines = xml_diff(src, src)
     # Diffing a file against itself should yield no +/- lines
-    changed = [ln for ln in lines if ln.startswith(("+", "-")) and not ln.startswith(("+++", "---"))]
+    changed = [
+        ln for ln in lines if ln.startswith(("+", "-")) and not ln.startswith(("+++", "---"))
+    ]
     assert len(changed) == 0
 
 
@@ -271,6 +282,7 @@ def test_xml_diff_different_files_has_output():
 
 def test_cli_diff_command():
     from pytableau.cli.main import app
+
     result = app.call(
         "diff",
         before=str(FIXTURE_DIR / "minimal_v2022_4.twb"),
@@ -283,6 +295,7 @@ def test_cli_git_clean_dry_run(tmp_path):
     import shutil
 
     from pytableau.cli.main import app
+
     dst = tmp_path / "workbook.twb"
     shutil.copy(FIXTURE_DIR / "minimal_v2022_4.twb", dst)
     result = app.call("git_clean", workbook=str(dst), dry_run=True)
@@ -291,6 +304,7 @@ def test_cli_git_clean_dry_run(tmp_path):
 
 def test_cli_to_json_command():
     from pytableau.cli.main import app
+
     result = app.call("to_json", workbook=str(FIXTURE_DIR / "minimal_v2022_4.twb"))
     assert result.ok
     assert "canonical" in result.result

@@ -159,11 +159,7 @@ class MetadataClient:
         """
         raw = self.query(_FIELDS_FOR_DATASOURCE_QUERY, {"name": datasource_name})
         fields: list[MetadataField] = []
-        nodes = (
-            raw.get("data", {})
-            .get("publishedDatasourcesConnection", {})
-            .get("nodes", [])
-        )
+        nodes = raw.get("data", {}).get("publishedDatasourcesConnection", {}).get("nodes", [])
         for ds_node in nodes:
             ds_name = ds_node.get("name", "")
             for f in ds_node.get("fields", []):
@@ -203,11 +199,7 @@ class MetadataClient:
         """
         raw = self.query(_SEARCH_FIELDS_QUERY, {"nameContains": name_contains})
         fields: list[MetadataField] = []
-        nodes = (
-            raw.get("data", {})
-            .get("fieldsConnection", {})
-            .get("nodes", [])
-        )
+        nodes = raw.get("data", {}).get("fieldsConnection", {}).get("nodes", [])
         for f in nodes:
             ds = f.get("datasource") or {}
             fields.append(

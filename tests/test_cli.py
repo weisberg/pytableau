@@ -338,9 +338,7 @@ def test_publish_no_server_raises_error(tmp_path: Path, monkeypatch: pytest.Monk
     def _mock_publish(*args: object, **kwargs: object) -> None:
         raise AuthenticationError("Token is invalid or expired")
 
-    monkeypatch.setattr(
-        "pytableau.core.workbook.Workbook.publish", _mock_publish
-    )
+    monkeypatch.setattr("pytableau.core.workbook.Workbook.publish", _mock_publish)
 
     result = app.call(
         "publish",

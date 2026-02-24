@@ -6,7 +6,9 @@ from pytableau.data.bridge import HyperBridge
 
 pytest.importorskip("pandas", reason="pandas is required for HyperBridge SQL tests")
 pytest.importorskip("pantab", reason="pantab is required for HyperBridge SQL tests")
-pytest.importorskip("tableauhyperapi", reason="tableauhyperapi is required for HyperBridge SQL tests")
+pytest.importorskip(
+    "tableauhyperapi", reason="tableauhyperapi is required for HyperBridge SQL tests"
+)
 pytestmark = [pytest.mark.requires_hyper]
 
 

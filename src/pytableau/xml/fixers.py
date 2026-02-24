@@ -33,17 +33,69 @@ class BracketFormatter(AutoFixer):
     """Ensure field references in formulas are bracketed."""
 
     # Match identifiers that look like unbracketed field names
-    _UNBR = re.compile(r'(?<!\[)\b([A-Z][A-Za-z0-9_ ]{2,})\b(?!\])')
-    _FUNCTIONS = frozenset({
-        "SUM", "AVG", "MIN", "MAX", "COUNT", "COUNTD", "IF", "THEN", "ELSE",
-        "ELSEIF", "END", "AND", "OR", "NOT", "FIXED", "INCLUDE", "EXCLUDE",
-        "ATTR", "YEAR", "MONTH", "DAY", "NOW", "TODAY", "IIF", "ISNULL",
-        "STR", "INT", "FLOAT", "DATE", "DATEPART", "DATETRUNC", "DATEDIFF",
-        "TRUE", "FALSE", "NULL", "CASE", "WHEN", "CONTAINS", "STARTSWITH",
-        "ENDSWITH", "LEFT", "RIGHT", "MID", "LEN", "TRIM", "UPPER", "LOWER",
-        "REPLACE", "SPLIT", "REGEXP_MATCH", "ZN", "IFNULL", "LOOKUP",
-        "WINDOW_SUM", "WINDOW_AVG", "INDEX", "RANK", "RUNNING_SUM",
-    })
+    _UNBR = re.compile(r"(?<!\[)\b([A-Z][A-Za-z0-9_ ]{2,})\b(?!\])")
+    _FUNCTIONS = frozenset(
+        {
+            "SUM",
+            "AVG",
+            "MIN",
+            "MAX",
+            "COUNT",
+            "COUNTD",
+            "IF",
+            "THEN",
+            "ELSE",
+            "ELSEIF",
+            "END",
+            "AND",
+            "OR",
+            "NOT",
+            "FIXED",
+            "INCLUDE",
+            "EXCLUDE",
+            "ATTR",
+            "YEAR",
+            "MONTH",
+            "DAY",
+            "NOW",
+            "TODAY",
+            "IIF",
+            "ISNULL",
+            "STR",
+            "INT",
+            "FLOAT",
+            "DATE",
+            "DATEPART",
+            "DATETRUNC",
+            "DATEDIFF",
+            "TRUE",
+            "FALSE",
+            "NULL",
+            "CASE",
+            "WHEN",
+            "CONTAINS",
+            "STARTSWITH",
+            "ENDSWITH",
+            "LEFT",
+            "RIGHT",
+            "MID",
+            "LEN",
+            "TRIM",
+            "UPPER",
+            "LOWER",
+            "REPLACE",
+            "SPLIT",
+            "REGEXP_MATCH",
+            "ZN",
+            "IFNULL",
+            "LOOKUP",
+            "WINDOW_SUM",
+            "WINDOW_AVG",
+            "INDEX",
+            "RANK",
+            "RUNNING_SUM",
+        }
+    )
 
     def fix(self, workbook: Workbook, *, dry_run: bool = False) -> list[FixAction]:
         actions = []
@@ -81,7 +133,8 @@ class CredentialScrubber(AutoFixer):
             for idx, conn in enumerate(ds.connections):
                 node = conn.xml_node
                 to_remove = [
-                    attr for attr in list(node.attrib)
+                    attr
+                    for attr in list(node.attrib)
                     if attr in _ALWAYS_SCRUB or _CREDENTIAL_ATTR_RE.search(attr)
                 ]
                 for attr in to_remove:

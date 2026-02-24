@@ -34,9 +34,7 @@ def test_index_creates_tables():
         cur = idx._conn.cursor()
         tables = {
             row[0]
-            for row in cur.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            ).fetchall()
+            for row in cur.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()
         }
     assert {"workbooks", "fields", "connections"} <= tables
 

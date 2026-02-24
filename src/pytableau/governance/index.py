@@ -164,9 +164,7 @@ class WorkbookIndex:
         """
         path = str(Path(path).resolve())
         cur = self._conn.cursor()
-        row = cur.execute(
-            "SELECT id FROM workbooks WHERE path = ?", (path,)
-        ).fetchone()
+        row = cur.execute("SELECT id FROM workbooks WHERE path = ?", (path,)).fetchone()
         if row:
             wb_id = row[0]
             cur.execute("DELETE FROM fields WHERE workbook_id = ?", (wb_id,))
@@ -269,9 +267,9 @@ class WorkbookIndex:
         cur = self._conn.cursor()
         workbooks = cur.execute("SELECT COUNT(*) FROM workbooks").fetchone()[0]
         fields = cur.execute("SELECT COUNT(*) FROM fields").fetchone()[0]
-        calc_fields = cur.execute(
-            "SELECT COUNT(*) FROM fields WHERE is_calculated = 1"
-        ).fetchone()[0]
+        calc_fields = cur.execute("SELECT COUNT(*) FROM fields WHERE is_calculated = 1").fetchone()[
+            0
+        ]
         connections = cur.execute("SELECT COUNT(*) FROM connections").fetchone()[0]
         return {
             "workbooks": workbooks,

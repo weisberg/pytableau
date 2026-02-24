@@ -71,6 +71,7 @@ def _rename_formula(formula: str | None, old_caption: str, new_caption: str) -> 
 # Credential scrubbing (#58)
 # ---------------------------------------------------------------------------
 
+
 class ScrubAction(NamedTuple):
     datasource: str
     connection: int
@@ -85,6 +86,7 @@ _ALWAYS_SCRUB = {"password", "odbc-connect-string-extras"}
 # ---------------------------------------------------------------------------
 # Hierarchy and Set dataclasses (#69)
 # ---------------------------------------------------------------------------
+
 
 @dataclass
 class Hierarchy:
@@ -102,6 +104,7 @@ class Set:
 # ---------------------------------------------------------------------------
 # Connection
 # ---------------------------------------------------------------------------
+
 
 class Connection(XMLNodeProxy):
     """Wrap a Tableau connection entry."""
@@ -180,6 +183,7 @@ class Connection(XMLNodeProxy):
 # Relation (#67)
 # ---------------------------------------------------------------------------
 
+
 class Relation(XMLNodeProxy):
     """A datasource relation node."""
 
@@ -250,6 +254,7 @@ class Relation(XMLNodeProxy):
 # MetadataRecord (#68)
 # ---------------------------------------------------------------------------
 
+
 class MetadataRecord(XMLNodeProxy):
     """Wrap a ``<metadata-record>`` node."""
 
@@ -285,6 +290,7 @@ class MetadataRecord(XMLNodeProxy):
 # Datasource
 # ---------------------------------------------------------------------------
 
+
 class Datasource(XMLNodeProxy):
     """Read/write wrapper for a Tableau ``<datasource>`` node."""
 
@@ -298,7 +304,11 @@ class Datasource(XMLNodeProxy):
         self._fields = self._read_fields()
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
-        self._regular_fields = [f for f in self._fields if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)]
+        self._regular_fields = [
+            f
+            for f in self._fields
+            if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)
+        ]
         self._hyper_path = self._discover_hyper_path()
         self._hyper_bridge = None
         self._extract_manager = ExtractManager()
@@ -435,7 +445,9 @@ class Datasource(XMLNodeProxy):
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
         self._regular_fields = [
-            f for f in self._fields if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)
+            f
+            for f in self._fields
+            if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)
         ]
 
     # ------------------------------------------------------------------
@@ -456,12 +468,14 @@ class Datasource(XMLNodeProxy):
                     to_remove.append(attr)
             for attr in to_remove:
                 old_value = node.attrib.pop(attr)
-                actions.append(ScrubAction(
-                    datasource=self.name,
-                    connection=idx,
-                    attribute=attr,
-                    old_value=old_value,
-                ))
+                actions.append(
+                    ScrubAction(
+                        datasource=self.name,
+                        connection=idx,
+                        attribute=attr,
+                        old_value=old_value,
+                    )
+                )
         return actions
 
     # ------------------------------------------------------------------
@@ -599,7 +613,9 @@ class Datasource(XMLNodeProxy):
     ) -> CalculatedField:
         normalised_caption = _normalise_field_name(caption)
         if self.get_field(caption) is not None:
-            raise DuplicateFieldError(f"Field '{caption}' already exists in datasource '{self.name}'.")
+            raise DuplicateFieldError(
+                f"Field '{caption}' already exists in datasource '{self.name}'."
+            )
         existing_names = {f.name for f in self._fields}
         existing_names.update({_normalise_field_name(f.caption) for f in self._fields})
         name = _build_calc_name(existing_names)
@@ -622,13 +638,11 @@ class Datasource(XMLNodeProxy):
         return field
 
     def remove_field(self, name_or_field: str | Field) -> None:
-        field = (
-            name_or_field
-            if isinstance(name_or_field, Field)
-            else self.get_field(name_or_field)
-        )
+        field = name_or_field if isinstance(name_or_field, Field) else self.get_field(name_or_field)
         if field is None:
-            raise FieldNotFoundError(f"Field '{name_or_field}' not found in datasource '{self.name}'.")
+            raise FieldNotFoundError(
+                f"Field '{name_or_field}' not found in datasource '{self.name}'."
+            )
         parent = field.xml_node.getparent()
         if parent is not None:
             parent.remove(field.xml_node)
@@ -660,10 +674,14 @@ class Datasource(XMLNodeProxy):
         if not old_key:
             raise FieldNotFoundError("Old field caption cannot be empty.")
         if self.get_field(new_caption) is not None:
-            raise DuplicateFieldError(f"Field '{new_caption}' already exists in datasource '{self.name}'.")
+            raise DuplicateFieldError(
+                f"Field '{new_caption}' already exists in datasource '{self.name}'."
+            )
         field = self.get_field(old_caption)
         if field is None:
-            raise FieldNotFoundError(f"Field '{old_caption}' not found in datasource '{self.name}'.")
+            raise FieldNotFoundError(
+                f"Field '{old_caption}' not found in datasource '{self.name}'."
+            )
 
         field.caption = new_caption
         self._sync_fields()
@@ -724,6 +742,7 @@ class Datasource(XMLNodeProxy):
         destination = Path(path).expanduser() if path else self._source_path
         if destination is None:
             from pytableau.exceptions import InvalidWorkbookError
+
             raise InvalidWorkbookError("Datasource path is unknown; use save_as().")
         self.save_as(destination)
 

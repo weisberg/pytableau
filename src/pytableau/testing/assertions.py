@@ -54,13 +54,9 @@ def assert_calculation_valid(workbook: Workbook, field_name: str) -> None:
             if f.caption == field_name:
                 formula = getattr(f, "formula", None)
                 if not formula:
-                    raise AssertionError(
-                        f"Field '{field_name}' exists but has no formula."
-                    )
+                    raise AssertionError(f"Field '{field_name}' exists but has no formula.")
                 return
-    raise AssertionError(
-        f"Calculated field '{field_name}' not found in workbook."
-    )
+    raise AssertionError(f"Calculated field '{field_name}' not found in workbook.")
 
 
 def assert_dashboard_contains(
@@ -90,9 +86,7 @@ def assert_dashboard_contains(
         )
 
     # Collect zone names from the parsed zones list (top-level direct children).
-    dashboard_sheets: set[str] = {
-        z.name for z in dashboard.zones if z.name
-    }
+    dashboard_sheets: set[str] = {z.name for z in dashboard.zones if z.name}
 
     # Also scan <zones> containers in the XML to catch dashboards that wrap
     # zones inside a <zones> element rather than placing them as direct

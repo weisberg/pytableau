@@ -124,8 +124,7 @@ class WorkbookDiff:
             for caption, diffs in ds_diff.fields_modified.items():
                 for fd in diffs:
                     lines.append(
-                        f"  ~ field {caption!r}.{fd.attribute}: "
-                        f"{fd.old_value!r} → {fd.new_value!r}"
+                        f"  ~ field {caption!r}.{fd.attribute}: {fd.old_value!r} → {fd.new_value!r}"
                     )
             for conn_change in ds_diff.connections_modified:
                 lines.append(f"  ~ connection: {conn_change}")
@@ -148,14 +147,16 @@ class WorkbookDiff:
         def _row(sign: str, category: str, detail: str, color: str) -> str:
             return (
                 f'<tr style="background:{color}">'
-                f'<td>{_html_escape(sign)}</td>'
-                f'<td>{_html_escape(category)}</td>'
-                f'<td>{_html_escape(detail)}</td>'
+                f"<td>{_html_escape(sign)}</td>"
+                f"<td>{_html_escape(category)}</td>"
+                f"<td>{_html_escape(detail)}</td>"
                 f"</tr>"
             )
 
         if self.before_version != self.after_version:
-            rows.append(_row("~", "version", f"{self.before_version} → {self.after_version}", "#fffde7"))
+            rows.append(
+                _row("~", "version", f"{self.before_version} → {self.after_version}", "#fffde7")
+            )
         for name in self.datasources_added:
             rows.append(_row("+", "datasource", name, "#e8f5e9"))
         for name in self.datasources_removed:
@@ -496,9 +497,8 @@ def apply_patch(workbook: Workbook, patch: Patch, *, validate: bool = True) -> i
         errors = [i for i in issues if i.level == "error"]
         if errors:
             from pytableau.exceptions import SchemaValidationError
-            raise SchemaValidationError(
-                f"Workbook is invalid after patch: {errors[0]}"
-            )
+
+            raise SchemaValidationError(f"Workbook is invalid after patch: {errors[0]}")
 
     return applied
 
@@ -532,16 +532,23 @@ def _apply_op(workbook: Workbook, op: PatchOp) -> None:
             attr = op.attribute
             if attr == "formula":
                 from pytableau.core.fields import CalculatedField
+
                 if isinstance(f, CalculatedField) and op.new_value is not None:
                     f.formula = str(op.new_value)
             elif attr in ("hidden",):
                 setattr(f, attr, bool(op.new_value))
         return
 
-    if action in (PatchAction.ADD_DATASOURCE, PatchAction.REMOVE_DATASOURCE,
-                  PatchAction.ADD_WORKSHEET, PatchAction.REMOVE_WORKSHEET,
-                  PatchAction.ADD_DASHBOARD, PatchAction.REMOVE_DASHBOARD,
-                  PatchAction.ADD_FIELD, PatchAction.REMOVE_FIELD):
+    if action in (
+        PatchAction.ADD_DATASOURCE,
+        PatchAction.REMOVE_DATASOURCE,
+        PatchAction.ADD_WORKSHEET,
+        PatchAction.REMOVE_WORKSHEET,
+        PatchAction.ADD_DASHBOARD,
+        PatchAction.REMOVE_DASHBOARD,
+        PatchAction.ADD_FIELD,
+        PatchAction.REMOVE_FIELD,
+    ):
         # Structural adds/removes require full node data which patches don't carry.
         # Silently skip — these are informational ops from from_diff().
         return

@@ -24,9 +24,9 @@ def _write_minimal_twb(path: Path) -> None:
     dashboards = etree.SubElement(workbook, "dashboards")
     etree.SubElement(dashboards, "dashboard", name="Exec")
     Path(path).write_text(
-        etree.tostring(
-            workbook, encoding="utf-8", xml_declaration=True, pretty_print=True
-        ).decode("utf-8"),
+        etree.tostring(workbook, encoding="utf-8", xml_declaration=True, pretty_print=True).decode(
+            "utf-8"
+        ),
         encoding="utf-8",
     )
 
