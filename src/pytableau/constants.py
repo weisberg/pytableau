@@ -172,6 +172,7 @@ class ParameterDomainType(str, Enum):
     """Parameter allowable values type."""
 
     ALL = "all"
+    ANY = "any"
     LIST = "list"
     RANGE = "range"
 

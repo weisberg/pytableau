@@ -161,7 +161,12 @@ class WorkbookCatalog:
                         "caption": parameter.caption,
                         "value": parameter.value,
                         "datatype": parameter.datatype,
-                        "domain_type": str(ParameterDomainType(parameter.domain_type)),
+                        "domain_type": str(
+                            next(
+                                (m for m in ParameterDomainType if m.value == parameter.domain_type),
+                                parameter.domain_type,
+                            )
+                        ),
                         "allowable_values": (
                             parameter.allowable_values
                             if str(parameter.domain_type) == ParameterDomainType.LIST.value
