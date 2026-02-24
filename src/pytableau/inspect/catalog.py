@@ -163,7 +163,11 @@ class WorkbookCatalog:
                         "datatype": parameter.datatype,
                         "domain_type": str(
                             next(
-                                (m for m in ParameterDomainType if m.value == parameter.domain_type),
+                                (
+                                    m
+                                    for m in ParameterDomainType
+                                    if m.value == parameter.domain_type
+                                ),
                                 parameter.domain_type,
                             )
                         ),

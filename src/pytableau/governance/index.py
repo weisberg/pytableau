@@ -103,7 +103,7 @@ class WorkbookIndex:
 
         # Insert fields
         for ds in wb.datasources:
-            for f in ds.fields:
+            for f in ds.all_fields:
                 formula = getattr(f, "formula", None)
                 is_calc = 1 if formula else 0
                 cur.execute(

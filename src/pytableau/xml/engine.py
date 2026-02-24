@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import re
+
 from lxml import etree
 
 from pytableau.constants import (
@@ -111,14 +113,21 @@ class XMLSchemaEngine:
                 )
 
         source_build = root.attrib.get("source-build")
-        if source_build and source_build not in TABLEAU_VERSION_MAP.values():
-            issues.append(
-                ValidationIssue(
-                    ValidationLevel.WARNING.value,
-                    f"Workbook source-build '{source_build}' is not recognized.",
-                    path="/workbook/@source-build",
+        if source_build:
+            # Build strings appear as "20243.24.0912.0921" or "2024.3.3 (20243.25.0114.1153)".
+            # Extract the compact build number (inside parens if present) and match on
+            # the 5-char major-version prefix (e.g. "20243") to tolerate patch releases.
+            _m = re.search(r"\((\d{5,})", source_build)
+            compact = _m.group(1) if _m else source_build
+            known_prefixes = {v[:5] for v in TABLEAU_VERSION_MAP.values()}
+            if compact[:5] not in known_prefixes:
+                issues.append(
+                    ValidationIssue(
+                        ValidationLevel.WARNING.value,
+                        f"Workbook source-build '{source_build}' is not recognized.",
+                        path="/workbook/@source-build",
+                    )
                 )
-            )
 
         return issues
 
