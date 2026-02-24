@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0a1] — 2026-02-24
+
+### Added
+- `pytableau.build` — Programmatic viz authoring: `DatasourceBuilder`, `WorksheetBuilder`, `DashboardBuilder`, `from_spec()`, `quick_chart()`, `quick_dashboard()`, `Theme` (Pillar III).
+- `Workbook.add_worksheet()` and `Workbook.add_dashboard()` — Accept builder instances or raw lxml elements.
+- `Workbook.from_spec()` — Classmethod alias for `pytableau.build.spec.from_spec()`.
+- `[build]` optional extra: `pip install "pytableau[build]"` for YAML spec support.
+
+### Changed
+- **BREAKING**: Minimum Python version raised to 3.11.
+- **BREAKING**: `pytableau.exceptions.ConnectionError` renamed to `TableauConnectionError` (backwards-compat alias retained for one major cycle).
+- Version bumped to `2.0.0a1` (alpha 1 of v2.0).
+- Development status classifier updated to Beta.
+
+### Migration from v1.0
+- Replace `from pytableau.exceptions import ConnectionError` with `from pytableau.exceptions import TableauConnectionError`.
+- Ensure Python ≥ 3.11 is installed.
+
 ## [1.0.0] — 2026-02-23
 
 ### Added

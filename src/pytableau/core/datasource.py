@@ -15,10 +15,10 @@ from lxml import etree
 from pytableau.constants import DataType, Role
 from pytableau.data.extract import ExtractManager
 from pytableau.exceptions import (
-    ConnectionError,
     DuplicateFieldError,
     FieldNotFoundError,
     HyperError,
+    TableauConnectionError,
 )
 from pytableau.xml.proxy import XMLNodeProxy
 
@@ -151,7 +151,7 @@ class Connection(XMLNodeProxy):
         try:
             return int(raw)
         except ValueError as exc:
-            raise ConnectionError(f"Invalid port value '{raw}' on connection node") from exc
+            raise TableauConnectionError(f"Invalid port value '{raw}' on connection node") from exc
 
     @port.setter
     def port(self, value: int | None) -> None:

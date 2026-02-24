@@ -12,6 +12,15 @@ Quickstart::
 from __future__ import annotations
 
 from pytableau._version import __version__
+from pytableau.build import (
+    DashboardBuilder,
+    DatasourceBuilder,
+    WorksheetBuilder,
+    from_spec,
+    quick_chart,
+    quick_dashboard,
+)
+from pytableau.build.theme import Theme
 from pytableau.calculations import LintIssue
 from pytableau.constants import (
     AggregationType,
@@ -49,6 +58,7 @@ from pytableau.exceptions import (
     PyTableauError,
     SchemaValidationError,
     ServerError,
+    TableauConnectionError,
     TemplateError,
     TemplateNotFoundError,
     UnmappedPlaceholderError,
@@ -86,6 +96,7 @@ __all__ = [
     "DatasourceError",
     "DatasourceNotFoundError",
     "ConnectionError",
+    "TableauConnectionError",
     "HyperError",
     "ExtractError",
     "ServerError",
@@ -111,6 +122,14 @@ __all__ = [
     "list_assets",
     "extract_asset",
     "add_asset",
+    # Build
+    "DatasourceBuilder",
+    "WorksheetBuilder",
+    "DashboardBuilder",
+    "from_spec",
+    "quick_chart",
+    "quick_dashboard",
+    "Theme",
     # Governance
     "WorkbookIndex",
     "GovernanceLintIssue",

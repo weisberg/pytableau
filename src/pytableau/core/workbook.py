@@ -6,7 +6,7 @@ import warnings
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from lxml import etree
 
@@ -277,6 +277,65 @@ class Workbook:
         wb = cls()
         wb._load_tree(tree)
         return wb
+
+    def add_worksheet(self, worksheet: Any) -> None:
+        """Add a worksheet to this workbook.
+
+        Args:
+            worksheet: Either a :class:`~pytableau.build.worksheet.WorksheetBuilder`
+                instance (``build()`` is called automatically) or a raw
+                ``lxml.etree._Element`` node.
+        """
+        from lxml import etree as _etree
+
+        if hasattr(worksheet, "build"):
+            node: _etree._Element = worksheet.build()
+        else:
+            node = worksheet
+
+        container = self.xml_root.find("worksheets")
+        if container is None:
+            container = _etree.SubElement(self.xml_root, "worksheets")
+        container.append(node)
+        self._load_tree(self.xml_tree)
+
+    def add_dashboard(self, dashboard: Any) -> None:
+        """Add a dashboard to this workbook.
+
+        Args:
+            dashboard: Either a :class:`~pytableau.build.dashboard.DashboardBuilder`
+                instance (``build()`` is called automatically) or a raw
+                ``lxml.etree._Element`` node.
+        """
+        from lxml import etree as _etree
+
+        if hasattr(dashboard, "build"):
+            node: _etree._Element = dashboard.build()
+        else:
+            node = dashboard
+
+        container = self.xml_root.find("dashboards")
+        if container is None:
+            container = _etree.SubElement(self.xml_root, "dashboards")
+        container.append(node)
+        self._load_tree(self.xml_tree)
+
+    @classmethod
+    def from_spec(cls, spec: Any) -> Workbook:
+        """Build a complete workbook from a spec dict, YAML file, or JSON file.
+
+        Convenience classmethod that delegates to
+        :func:`pytableau.build.spec.from_spec`.
+
+        Args:
+            spec: A dict, a path to a YAML/JSON file, or a YAML/JSON string.
+
+        Returns:
+            Fully constructed :class:`Workbook`.
+        """
+        from pytableau.build.spec import from_spec as _from_spec
+
+        return _from_spec(spec)
 
     @classmethod
     def from_template(cls, template: str | Path, **kwargs: object) -> Workbook:

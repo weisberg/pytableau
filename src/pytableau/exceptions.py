@@ -83,7 +83,7 @@ class DatasourceNotFoundError(DatasourceError, KeyError):
     """The requested datasource does not exist in the workbook."""
 
 
-class ConnectionError(DatasourceError):
+class TableauConnectionError(DatasourceError):
     """Error related to connection manipulation."""
 
 
@@ -158,3 +158,6 @@ class ValidationIssue:
         prefix = self.level.upper()
         loc = f" at {self.path}" if self.path else ""
         return f"[{prefix}]{loc}: {self.message}"
+
+
+ConnectionError = TableauConnectionError  # noqa: A001  # deprecated alias
