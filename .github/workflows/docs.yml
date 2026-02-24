@@ -31,7 +31,9 @@ jobs:
           python-version: "3.12"
 
       - name: Install docs dependencies
-        run: pip install mkdocs mkdocstrings[python]
+        run: |
+          pip install mkdocs mkdocstrings[python]
+          pip install -e ".[all]"
 
       - name: Build docs
         run: mkdocs build
