@@ -27,6 +27,13 @@ class DashboardSize:
 
 
 @dataclass
+class DeviceLayout:
+    device_name: str   # "phone", "tablet", "desktop"
+    sizing: str | None
+    zones: list[Zone]
+
+
+@dataclass
 class Zone:
     zone_type: str
     name: str
@@ -94,6 +101,7 @@ class Dashboard(XMLNodeProxy):
         self.size = self._read_size()
         self.zones = self._read_zones()
         self.actions = self._read_actions()
+        self.device_layouts = self._read_device_layouts()
 
     def _read_size(self) -> DashboardSize:
         size_node = self.xml_node.find("size")
@@ -120,6 +128,24 @@ class Dashboard(XMLNodeProxy):
             h=_to_number(node.get("h")),
             children=children,
         )
+
+    def _read_device_layouts(self) -> list[DeviceLayout]:
+        devicelayouts = self.xml_node.find("devicelayouts")
+        if devicelayouts is None:
+            return []
+        result = []
+        for dl_node in devicelayouts.findall("devicelayout"):
+            device_name = dl_node.get("name") or dl_node.get("device", "")
+            sizing = dl_node.get("sizing")
+            zone_nodes = dl_node.findall("zone") + dl_node.findall(".//zones/zone")
+            zones = [self._read_zone(z) for z in zone_nodes]
+            result.append(DeviceLayout(device_name=device_name, sizing=sizing, zones=zones))
+        return result
+
+    @property
+    def has_phone_layout(self) -> bool:
+        """Return ``True`` if this dashboard has a phone device layout."""
+        return any(dl.device_name.lower() == "phone" for dl in self.device_layouts)
 
     def _read_actions(self) -> list[Action]:
         actions_node = self.xml_node.find("actions")
@@ -334,4 +360,5 @@ __all__ = [
     "DashboardSize",
     "Zone",
     "Action",
+    "DeviceLayout",
 ]

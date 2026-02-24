@@ -25,6 +25,7 @@ from tooli.errors import (
 )
 
 from pytableau.exceptions import (
+    AmbiguousWorkbookError,
     AuthenticationError,
     CorruptWorkbookError,
     DatasourceNotFoundError,
@@ -41,7 +42,7 @@ from pytableau.exceptions import (
 app = Tooli(
     name="pytableau",
     description="The unified Python SDK for Tableau workbook engineering.",
-    version="0.4.0",
+    version="0.6.0",
 )
 
 
@@ -55,6 +56,7 @@ def _map_error(exc: PyTableauError) -> ToolError:
             FieldNotFoundError,
             DuplicateFieldError,
             UnmappedPlaceholderError,
+            AmbiguousWorkbookError,
         ),
     ):
         return InputError(str(exc))
@@ -151,6 +153,7 @@ def diff(
 @app.command(annotations=ReadOnly | Idempotent, paginated=True)
 def catalog(
     workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    connections: Annotated[bool, Option("--connections", help="Include connection audit")] = False,
 ) -> list[dict]:
     """List all datasources, fields, calculated fields, and connections."""
     from pytableau.core.workbook import Workbook
@@ -162,6 +165,8 @@ def catalog(
         raise _map_error(exc) from exc
 
     cat = WorkbookCatalog(wb)
+    if connections:
+        return cat.connection_audit()
     data = cat.to_dict()
     return data["datasources"]
 
@@ -478,6 +483,117 @@ def publish(
         "server": server,
         "project": project,
         "status": "published",
+    }
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def complexity(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+) -> dict:
+    """Analyze workbook complexity and return a grade + breakdown."""
+    from pytableau.core.workbook import Workbook
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    report = wb.complexity_report()
+    return {
+        "path": str(workbook),
+        **report.to_dict(),
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def auto_fix(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
+    """Apply auto-fixers to a workbook (bracket formatting, credential scrubbing, etc.)."""
+    from pytableau.core.workbook import Workbook
+
+    destination = output or workbook
+    record_dry_action("auto_fix", str(workbook), details={"output": str(destination)})
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    actions = wb.auto_fix(dry_run=False)
+
+    try:
+        wb.save_as(destination, scrub_credentials=False)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "fixes_applied": len(actions),
+        "actions": [
+            {"fixer": a.fixer_name, "path": a.path, "old": a.old_value, "new": a.new_value}
+            for a in actions
+        ],
+    }
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+@dry_run_support
+def promote(
+    workbook: Annotated[Path, Argument(help="Path to .twb or .twbx")],
+    from_env: Annotated[str, Option("--from-env", help="Source environment name")],
+    to_env: Annotated[str, Option("--to-env", help="Target environment name")],
+    config_file: Annotated[Path, Option("--config-file", help="Path to promotion config YAML/JSON")],
+    output: Annotated[
+        Path | None, Option("-o", help="Output path (default: overwrite input)")
+    ] = None,
+) -> dict:
+    """Promote a workbook from one environment to another."""
+    from pytableau.core.workbook import Workbook
+    from pytableau.package.promotion import PromotionConfig
+
+    destination = output or workbook
+    record_dry_action(
+        "promote",
+        str(workbook),
+        details={"from_env": from_env, "to_env": to_env, "output": str(destination)},
+    )
+
+    suffix = config_file.suffix.lower()
+    try:
+        if suffix in {".yaml", ".yml"}:
+            cfg = PromotionConfig.from_yaml(str(config_file))
+        else:
+            import json
+            cfg = PromotionConfig.from_dict(json.loads(config_file.read_text()))
+    except Exception as exc:
+        raise InputError(f"Failed to load promotion config: {exc}") from exc
+
+    try:
+        wb = Workbook.open(workbook)
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    try:
+        changes = wb.promote(from_env, to_env, cfg)
+        wb.save_as(destination, scrub_credentials=False)
+    except ValueError as exc:
+        raise InputError(str(exc)) from exc
+    except PyTableauError as exc:
+        raise _map_error(exc) from exc
+
+    return {
+        "workbook": str(workbook),
+        "output": str(destination),
+        "from_env": from_env,
+        "to_env": to_env,
+        "changes": len(changes),
+        "details": [c._asdict() for c in changes],
     }
 
 

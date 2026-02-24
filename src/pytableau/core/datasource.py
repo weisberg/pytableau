@@ -8,9 +8,11 @@ from __future__ import annotations
 
 import re
 import warnings
-from collections.abc import Iterable
+import zipfile
+from collections.abc import Callable, Iterable
+from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
 
@@ -68,6 +70,42 @@ def _rename_formula(formula: str | None, old_caption: str, new_caption: str) -> 
     new = f"[{_normalise_field_name(new_caption)}]"
     return formula.replace(old, new)
 
+
+# ---------------------------------------------------------------------------
+# Credential scrubbing (#58)
+# ---------------------------------------------------------------------------
+
+class ScrubAction(NamedTuple):
+    datasource: str
+    connection: int
+    attribute: str
+    old_value: str
+
+
+_CREDENTIAL_ATTR_RE = re.compile(r"(password|secret)", re.IGNORECASE)
+_ALWAYS_SCRUB = {"password", "odbc-connect-string-extras"}
+
+
+# ---------------------------------------------------------------------------
+# Hierarchy and Set dataclasses (#69)
+# ---------------------------------------------------------------------------
+
+@dataclass
+class Hierarchy:
+    name: str
+    levels: list[str]
+
+
+@dataclass
+class Set:
+    name: str
+    caption: str
+    field_name: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Connection
+# ---------------------------------------------------------------------------
 
 class Connection(XMLNodeProxy):
     """Wrap a Tableau connection entry."""
@@ -142,6 +180,10 @@ class Connection(XMLNodeProxy):
         self.xml_node.set("class", value)
 
 
+# ---------------------------------------------------------------------------
+# Relation (#67)
+# ---------------------------------------------------------------------------
+
 class Relation(XMLNodeProxy):
     """A datasource relation node."""
 
@@ -157,6 +199,9 @@ class Relation(XMLNodeProxy):
     def custom_sql(self) -> str | None:
         node = self.xml_node.find("custom-sql")
         if node is None:
+            # type='text' stores SQL as element text
+            if self.relation_type == "text":
+                return (self.xml_node.text or "").strip() or None
             return None
         return (node.text or "").strip() or node.get("text")
 
@@ -167,6 +212,82 @@ class Relation(XMLNodeProxy):
             out.append(dict(join.attrib))
         return out
 
+    # --- Enhanced join-tree properties (#67) ---
+
+    @property
+    def join_type(self) -> str | None:
+        """Return the join type from a ``<clause type=...>`` or ``join`` attribute."""
+        clause = self.xml_node.find("clause")
+        if clause is not None:
+            return clause.get("type")
+        return self.xml_node.get("join")
+
+    @property
+    def left(self) -> Relation | None:
+        """Return the first child ``<relation>`` (left side of a join)."""
+        children = self.xml_node.findall("relation")
+        if children:
+            return Relation(children[0])
+        return None
+
+    @property
+    def right(self) -> Relation | None:
+        """Return the second child ``<relation>`` (right side of a join)."""
+        children = self.xml_node.findall("relation")
+        if len(children) >= 2:
+            return Relation(children[1])
+        return None
+
+    @property
+    def on_clause(self) -> str | None:
+        """Return the ON-clause expression from ``<clause>`` element text."""
+        clause = self.xml_node.find("clause")
+        if clause is not None:
+            expr = clause.find("expression")
+            if expr is not None:
+                return expr.get("op") or (expr.text or "").strip() or None
+            return (clause.text or "").strip() or None
+        return None
+
+
+# ---------------------------------------------------------------------------
+# MetadataRecord (#68)
+# ---------------------------------------------------------------------------
+
+class MetadataRecord(XMLNodeProxy):
+    """Wrap a ``<metadata-record>`` node."""
+
+    @property
+    def remote_name(self) -> str:
+        node = self.xml_node.find("remote-name")
+        return (node.text or "").strip() if node is not None else ""
+
+    @property
+    def remote_type(self) -> str:
+        node = self.xml_node.find("remote-type")
+        return (node.text or "").strip() if node is not None else ""
+
+    @property
+    def local_name(self) -> str:
+        node = self.xml_node.find("local-name")
+        return (node.text or "").strip() if node is not None else ""
+
+    @property
+    def aggregation(self) -> str:
+        node = self.xml_node.find("aggregation")
+        return (node.text or "").strip() if node is not None else ""
+
+    @property
+    def contains_null(self) -> bool:
+        node = self.xml_node.find("contains-null")
+        if node is None:
+            return True
+        return (node.text or "").strip().lower() not in {"false", "0", "no"}
+
+
+# ---------------------------------------------------------------------------
+# Datasource
+# ---------------------------------------------------------------------------
 
 class Datasource(XMLNodeProxy):
     """Read/write wrapper for a Tableau ``<datasource>`` node."""
@@ -185,6 +306,8 @@ class Datasource(XMLNodeProxy):
         self._hyper_path = self._discover_hyper_path()
         self._hyper_bridge = None
         self._extract_manager = ExtractManager()
+        self._source_path: Path | None = None
+        self._metadata_records_cache: list[MetadataRecord] | None = None
 
     @property
     def hyper(self):
@@ -319,6 +442,143 @@ class Datasource(XMLNodeProxy):
             f for f in self._fields if isinstance(f, Field) and not isinstance(f, CalculatedField | Parameter)
         ]
 
+    # ------------------------------------------------------------------
+    # Credential scrubbing (#58)
+    # ------------------------------------------------------------------
+
+    def scrub_credentials(self) -> list[ScrubAction]:
+        """Remove credential attributes from all connections.
+
+        Returns a list of :class:`ScrubAction` describing each removal.
+        """
+        actions: list[ScrubAction] = []
+        for idx, conn in enumerate(self.connections):
+            node = conn.xml_node
+            to_remove = []
+            for attr in list(node.attrib):
+                if attr in _ALWAYS_SCRUB or _CREDENTIAL_ATTR_RE.search(attr):
+                    to_remove.append(attr)
+            for attr in to_remove:
+                old_value = node.attrib.pop(attr)
+                actions.append(ScrubAction(
+                    datasource=self.name,
+                    connection=idx,
+                    attribute=attr,
+                    old_value=old_value,
+                ))
+        return actions
+
+    # ------------------------------------------------------------------
+    # Relation tree helpers (#67)
+    # ------------------------------------------------------------------
+
+    @property
+    def relation(self) -> Relation | None:
+        """Return the root ``<relation>`` node."""
+        node = self.xml_node.find(".//relation")
+        return Relation(node) if node is not None else None
+
+    def list_custom_sql(self) -> list[str]:
+        """Return all custom SQL strings across all ``type='text'`` relations."""
+        results: list[str] = []
+        for rel_node in self.xml_node.findall(".//relation"):
+            r = Relation(rel_node)
+            if r.relation_type == "text":
+                sql = r.custom_sql
+                if sql:
+                    results.append(sql)
+            # also check <custom-sql> children
+            cs_node = rel_node.find("custom-sql")
+            if cs_node is not None:
+                text = (cs_node.text or "").strip()
+                if text and text not in results:
+                    results.append(text)
+        return results
+
+    # ------------------------------------------------------------------
+    # MetadataRecords (#68)
+    # ------------------------------------------------------------------
+
+    @property
+    def metadata_records(self) -> list[MetadataRecord]:
+        """Return all ``<metadata-record>`` nodes (lazily cached)."""
+        if self._metadata_records_cache is None:
+            records = []
+            for node in self.xml_node.findall(".//metadata-record"):
+                records.append(MetadataRecord(node))
+            self._metadata_records_cache = records
+        return self._metadata_records_cache
+
+    # ------------------------------------------------------------------
+    # Hierarchies and Sets (#69)
+    # ------------------------------------------------------------------
+
+    @property
+    def hierarchies(self) -> list[Hierarchy]:
+        """Parse ``<drill-paths>`` into :class:`Hierarchy` objects."""
+        result: list[Hierarchy] = []
+        drill_paths = self.xml_node.find(".//drill-paths")
+        if drill_paths is None:
+            return result
+        for path_node in drill_paths.findall("drill-path"):
+            name = path_node.get("name", "")
+            levels = []
+            for field_node in path_node.findall("field"):
+                val = (field_node.text or "").strip() or field_node.get("name", "")
+                if val:
+                    levels.append(_normalise_field_name(val))
+            result.append(Hierarchy(name=name, levels=levels))
+        return result
+
+    @property
+    def sets(self) -> list[Set]:
+        """Parse set groups from ``<group class='groupfilter'>`` nodes."""
+        result: list[Set] = []
+        for group in self.xml_node.findall(".//group"):
+            if group.get("class") == "groupfilter":
+                name = group.get("name", "")
+                caption = group.get("caption", name)
+                field_name = group.get("field")
+                if field_name:
+                    field_name = _normalise_field_name(field_name)
+                result.append(Set(name=name, caption=caption, field_name=field_name))
+        return result
+
+    # ------------------------------------------------------------------
+    # Bulk field operations (#80)
+    # ------------------------------------------------------------------
+
+    def bulk_update_fields(self, where: Callable[[Field], bool], updates: dict) -> int:
+        """Update attributes on all fields matching *where*.
+
+        *updates* is a mapping of attribute name → new value.
+        Returns the number of fields updated.
+        """
+        count = 0
+        for field in list(self._fields):
+            if where(field):
+                for attr, val in updates.items():
+                    setattr(field, attr, val)
+                count += 1
+        return count
+
+    def bulk_rename_fields(self, mapping: dict[str, str]) -> int:
+        """Rename multiple fields at once using *mapping* (old→new caption).
+
+        Returns the number of fields renamed.
+        """
+        count = 0
+        for old_caption, new_caption in mapping.items():
+            field = self.get_field(old_caption)
+            if field is not None:
+                self.rename_field(old_caption, new_caption)
+                count += 1
+        return count
+
+    # ------------------------------------------------------------------
+    # swap_connection / add_calculated_field / remove_field / rename_field
+    # ------------------------------------------------------------------
+
     def swap_connection(self, **kwargs: str | int | None) -> None:
         for conn in self.connections:
             if "server" in kwargs and kwargs["server"] is not None:
@@ -422,6 +682,86 @@ class Datasource(XMLNodeProxy):
             for dashboard in self._workbook.dashboards:
                 dashboard.replace_field_reference(old_key, new_key)
 
+    # ------------------------------------------------------------------
+    # .tds / .tdsx standalone open/save (#65)
+    # ------------------------------------------------------------------
+
+    @classmethod
+    def open(cls, path: Path | str) -> Datasource:
+        """Open a standalone ``.tds`` or ``.tdsx`` file."""
+        from pytableau.exceptions import InvalidWorkbookError
+
+        source = Path(path).expanduser()
+        suffix = source.suffix.lower()
+
+        if suffix == ".tds":
+            try:
+                tree = etree.parse(str(source))
+            except (OSError, etree.XMLSyntaxError) as exc:
+                raise InvalidWorkbookError(f"Cannot parse .tds file: {source}") from exc
+            root = tree.getroot()
+            ds = cls(root)
+            ds._source_path = source
+            return ds
+
+        if suffix == ".tdsx":
+            try:
+                with zipfile.ZipFile(source) as zf:
+                    tds_names = [n for n in zf.namelist() if n.lower().endswith(".tds")]
+                    if not tds_names:
+                        raise InvalidWorkbookError(f"No .tds file found in .tdsx: {source}")
+                    tds_bytes = zf.read(tds_names[0])
+            except (OSError, zipfile.BadZipFile) as exc:
+                raise InvalidWorkbookError(f"Cannot open .tdsx archive: {source}") from exc
+            try:
+                root = etree.fromstring(tds_bytes)
+            except etree.XMLSyntaxError as exc:
+                raise InvalidWorkbookError(f"Cannot parse .tds inside .tdsx: {source}") from exc
+            ds = cls(root)
+            ds._source_path = source
+            return ds
+
+        raise InvalidWorkbookError(f"Unsupported datasource path: {source}")
+
+    def save(self, path: Path | str | None = None) -> None:
+        """Save this datasource to its source path (or *path*)."""
+        destination = Path(path).expanduser() if path else self._source_path
+        if destination is None:
+            from pytableau.exceptions import InvalidWorkbookError
+            raise InvalidWorkbookError("Datasource path is unknown; use save_as().")
+        self.save_as(destination)
+
+    def save_as(self, path: Path | str) -> None:
+        """Save this datasource to *path* (``.tds`` or ``.tdsx``)."""
+        from pytableau.exceptions import InvalidWorkbookError
+
+        destination = Path(path).expanduser()
+        suffix = destination.suffix.lower()
+
+        xml_bytes = etree.tostring(
+            self.xml_node,
+            encoding="utf-8",
+            xml_declaration=True,
+            pretty_print=True,
+        )
+
+        if suffix == ".tds":
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            destination.write_bytes(xml_bytes)
+            self._source_path = destination
+            return
+
+        if suffix == ".tdsx":
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            tds_name = destination.stem + ".tds"
+            with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+                zf.writestr(tds_name, xml_bytes)
+            self._source_path = destination
+            return
+
+        raise InvalidWorkbookError(f"Unsupported datasource path: {destination}")
+
+
 class DatasourceCollection:
     """Dict-like ordered datasource collection."""
 
@@ -466,5 +806,9 @@ __all__ = [
     "DatasourceCollection",
     "Connection",
     "Relation",
+    "MetadataRecord",
+    "Hierarchy",
+    "Set",
+    "ScrubAction",
     "_normalise_field_name",
 ]

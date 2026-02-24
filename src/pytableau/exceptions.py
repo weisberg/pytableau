@@ -22,6 +22,18 @@ class PackageError(FileError):
     """Error extracting or creating a .twbx package."""
 
 
+class AmbiguousWorkbookError(PackageError):
+    """Multiple .twb files found in a TWBX archive with no unambiguous root."""
+
+    def __init__(self, msg: str, candidates: list[str] | None = None) -> None:
+        super().__init__(msg)
+        self.candidates: list[str] = candidates or []
+
+
+class InvalidPathError(FileError):
+    """A path contains disallowed components (e.g. path traversal via `..`)."""
+
+
 class CorruptWorkbookError(FileError):
     """The workbook XML is structurally corrupt or unreadable."""
 
@@ -99,6 +111,10 @@ class AuthenticationError(ServerError):
 
 class PublishError(ServerError):
     """Error publishing a workbook to Tableau Server/Cloud."""
+
+
+class LazyNotMaterializedError(PyTableauError):
+    """Raised when accessing lazy-loaded collections in streaming mode."""
 
 
 # --- Template Errors ---

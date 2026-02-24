@@ -32,6 +32,7 @@ class XMLSchemaEngine:
 
     def __init__(self, version: str = DEFAULT_TABLEAU_VERSION) -> None:
         self.version = version
+        self.unknown_elements: set[str] = set()
 
     def _normalise_version(self, version: str | None) -> str:
         if not version:
@@ -56,9 +57,10 @@ class XMLSchemaEngine:
         resolved_version = self._normalise_version(version)
 
         if tag not in _KNOWN_TAGS:
+            self.unknown_elements.add(tag)
             issues.append(
                 ValidationIssue(
-                    ValidationLevel.WARNING.value,
+                    ValidationLevel.INFO.value,
                     f"Unknown Tableau XML tag '{tag}' under <{parent_tag}>.",
                     path=f"/{parent_tag}/{tag}",
                 )

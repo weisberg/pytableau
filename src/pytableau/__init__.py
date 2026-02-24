@@ -25,6 +25,7 @@ from pytableau.constants import (
 )
 from pytableau.core.workbook import Workbook
 from pytableau.exceptions import (
+    AmbiguousWorkbookError,
     AuthenticationError,
     ConnectionError,
     CorruptWorkbookError,
@@ -38,7 +39,9 @@ from pytableau.exceptions import (
     FormulaError,
     HyperError,
     IncompatibleVersionError,
+    InvalidPathError,
     InvalidWorkbookError,
+    LazyNotMaterializedError,
     PackageError,
     PublishError,
     PyTableauError,
@@ -59,6 +62,9 @@ __all__ = [
     "FileError",
     "InvalidWorkbookError",
     "PackageError",
+    "AmbiguousWorkbookError",
+    "InvalidPathError",
+    "LazyNotMaterializedError",
     "CorruptWorkbookError",
     "XMLError",
     "SchemaValidationError",

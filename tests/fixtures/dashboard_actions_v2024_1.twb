@@ -1,0 +1,57 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<workbook source-build="20241.24.0320.0919" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="sqlserver.sales" caption="Sales">
+      <connection class="sqlserver" server="dev.example.com" dbname="sales" username="reader"/>
+      <columns>
+        <column name="[Region]" caption="Region" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative"/>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Sales Map">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.sales"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+    <worksheet name="Sales Detail">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.sales"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards>
+    <dashboard name="Sales Overview">
+      <size maxheight="768" maxwidth="1366" minheight="768" minwidth="1366"/>
+      <zones>
+        <zone h="100" name="Sales Map" type="sheet" w="600" x="0" y="0"/>
+        <zone h="100" name="Sales Detail" type="sheet" w="600" x="600" y="0"/>
+      </zones>
+      <devicelayouts>
+        <devicelayout name="phone">
+          <zones>
+            <zone h="50" name="Sales Map" type="sheet" w="320" x="0" y="0"/>
+          </zones>
+        </devicelayout>
+        <devicelayout name="tablet">
+          <zones>
+            <zone h="100" name="Sales Map" type="sheet" w="768" x="0" y="0"/>
+          </zones>
+        </devicelayout>
+      </devicelayouts>
+      <actions>
+        <action field="[Region]" name="Filter to Detail" source-sheet="Sales Map" target-sheet="Sales Detail" type="filter"/>
+        <action name="Highlight Region" source-sheet="Sales Map" target-sheet="Sales Detail" type="highlight"/>
+      </actions>
+    </dashboard>
+  </dashboards>
+</workbook>

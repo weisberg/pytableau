@@ -2,10 +2,11 @@
 
 from __future__ import annotations
 
+import warnings
 import zipfile
 from pathlib import Path
 from tempfile import TemporaryDirectory
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, NamedTuple
 
 from lxml import etree
 
@@ -13,6 +14,7 @@ from pytableau.constants import DEFAULT_TABLEAU_VERSION, TABLEAU_VERSION_MAP
 from pytableau.exceptions import (
     CorruptWorkbookError,
     InvalidWorkbookError,
+    LazyNotMaterializedError,
     SchemaValidationError,
 )
 from pytableau.inspect.catalog import WorkbookCatalog
@@ -29,6 +31,7 @@ from .worksheet import Worksheet, WorksheetCollection
 
 if TYPE_CHECKING:
     from pytableau.exceptions import ValidationIssue
+    from pytableau.package.promotion import PromotionChange, PromotionConfig
 
 
 _SOURCE_BUILD_TO_VERSION = {v: k for k, v in TABLEAU_VERSION_MAP.items()}
@@ -51,6 +54,76 @@ def _collect_top_level(parent: etree._Element, tag: str) -> list[etree._Element]
     return list(parent.findall(tag))
 
 
+# ---------------------------------------------------------------------------
+# Lazy sentinel collections for streaming mode (#61)
+# ---------------------------------------------------------------------------
+
+class _LazyWorksheetCollection:
+    """Placeholder collection that raises when accessed in streaming mode."""
+
+    def __iter__(self):
+        raise LazyNotMaterializedError(
+            "Worksheets are not loaded in streaming mode. "
+            "Open without streaming=True to access worksheets."
+        )
+
+    def __len__(self) -> int:
+        raise LazyNotMaterializedError(
+            "Worksheets are not loaded in streaming mode."
+        )
+
+    def __getitem__(self, key):
+        raise LazyNotMaterializedError(
+            "Worksheets are not loaded in streaming mode."
+        )
+
+    @property
+    def names(self) -> list[str]:
+        raise LazyNotMaterializedError(
+            "Worksheets are not loaded in streaming mode."
+        )
+
+
+class _LazyDashboardCollection:
+    """Placeholder collection that raises when accessed in streaming mode."""
+
+    def __iter__(self):
+        raise LazyNotMaterializedError(
+            "Dashboards are not loaded in streaming mode. "
+            "Open without streaming=True to access dashboards."
+        )
+
+    def __len__(self) -> int:
+        raise LazyNotMaterializedError(
+            "Dashboards are not loaded in streaming mode."
+        )
+
+    def __getitem__(self, key):
+        raise LazyNotMaterializedError(
+            "Dashboards are not loaded in streaming mode."
+        )
+
+    @property
+    def names(self) -> list[str]:
+        raise LazyNotMaterializedError(
+            "Dashboards are not loaded in streaming mode."
+        )
+
+
+# ---------------------------------------------------------------------------
+# swap_connection result type (#79)
+# ---------------------------------------------------------------------------
+
+class SwapResult(NamedTuple):
+    updated_count: int
+    skipped_count: int
+    details: list[dict]
+
+
+# ---------------------------------------------------------------------------
+# Workbook
+# ---------------------------------------------------------------------------
+
 class Workbook:
     """Top-level entry point for all pytableau operations."""
 
@@ -65,6 +138,7 @@ class Workbook:
         self.dashboards: DashboardCollection = DashboardCollection([])
         self.parameters: Datasource | None = None
         self._template_engine: TemplateEngine | None = None
+        self._is_streaming: bool = False
 
     @property
     def version(self) -> str:
@@ -91,31 +165,103 @@ class Workbook:
         return self._tree
 
     @classmethod
-    def open(cls, path: str | Path) -> Workbook:
-        """Open an existing ``.twb`` or ``.twbx`` file."""
+    def open(
+        cls,
+        path: str | Path,
+        *,
+        strict: bool = False,
+        compatibility: bool = False,
+        streaming: bool = False,
+        twb_hint: str | None = None,
+    ) -> Workbook:
+        """Open an existing ``.twb`` or ``.twbx`` file.
+
+        Args:
+            path: Path to the workbook file.
+            strict: If ``True``, reject huge trees (>500 000 nodes) and unknown
+                root elements outright.
+            compatibility: If ``True``, issue a warning (instead of raising) for
+                non-``workbook`` root elements.
+            streaming: If ``True``, only parse datasources; worksheets and
+                dashboards are replaced by lazy sentinel collections.
+            twb_hint: Filename hint for resolving ambiguous multi-TWB archives.
+        """
         workbook_path = Path(path).expanduser()
-        manager = PackageManager(workbook_path)
+        manager = PackageManager(workbook_path, twb_hint=twb_hint)
         try:
             twb_path = manager.twb_path
         except (OSError, ValueError) as exc:
             raise InvalidWorkbookError(f"Unable to open workbook: {workbook_path}") from exc
 
+        # Hardened parser (#57)
+        _parser = etree.XMLParser(
+            resolve_entities=False,
+            no_network=True,
+            huge_tree=not strict,
+        )
         try:
-            tree = etree.parse(str(twb_path))
+            tree = etree.parse(str(twb_path), parser=_parser)
         except (OSError, etree.XMLSyntaxError) as exc:
             manager.close()
             raise CorruptWorkbookError(f"Workbook XML cannot be parsed: {twb_path}") from exc
 
         root = tree.getroot()
+
+        # Strict mode: node count limit
+        if strict:
+            node_count = sum(1 for _ in root.iter())
+            if node_count > 500_000:
+                manager.close()
+                raise InvalidWorkbookError(
+                    f"Workbook exceeds 500 000 nodes ({node_count}) in strict mode."
+                )
+
         if root.tag != "workbook":
-            manager.close()
-            raise InvalidWorkbookError(f"Not a Tableau workbook file: {workbook_path}")
+            if compatibility:
+                warnings.warn(
+                    f"Expected <workbook> root element, found <{root.tag}>. "
+                    "Processing with compatibility mode.",
+                    stacklevel=2,
+                )
+            elif not strict:
+                manager.close()
+                raise InvalidWorkbookError(f"Not a Tableau workbook file: {workbook_path}")
+            else:
+                manager.close()
+                raise InvalidWorkbookError(f"Not a Tableau workbook file: {workbook_path}")
 
         wb = cls()
         wb._path = workbook_path
         wb._package_manager = manager
+
+        if streaming:
+            wb._is_streaming = True
+            wb._tree = tree
+            wb._load_datasources_only(tree)
+            wb.worksheets = _LazyWorksheetCollection()  # type: ignore[assignment]
+            wb.dashboards = _LazyDashboardCollection()  # type: ignore[assignment]
+            return wb
+
         wb._load_tree(tree)
         return wb
+
+    def _load_datasources_only(self, tree: etree._ElementTree) -> None:
+        """Parse only datasources (used in streaming mode)."""
+        root = tree.getroot()
+        source_build = root.get("source-build")
+        self._version = _normalize_version(source_build)
+        self.source_platform = root.get("source-platform")
+
+        datasources: list[Datasource] = []
+        parameters: Datasource | None = None
+        for node in _collect_top_level(root, "datasource"):
+            ds = Datasource(node, workbook=self)
+            if ds.is_parameters:
+                parameters = ds
+                continue
+            datasources.append(ds)
+        self.parameters = parameters
+        self.datasources = DatasourceCollection(datasources)
 
     @classmethod
     def new(cls, version: str = DEFAULT_TABLEAU_VERSION) -> Workbook:
@@ -227,6 +373,102 @@ class Workbook:
         """Generate documentation content for the workbook."""
         return WorkbookReport(self)
 
+    def complexity_report(self, config=None):
+        """Analyze workbook complexity and return a :class:`ComplexityReport`."""
+        from pytableau.inspect.complexity import analyze_complexity
+        return analyze_complexity(self, config)
+
+    def auto_fix(self, rules=None, dry_run: bool = False) -> list:
+        """Apply auto-fixers to this workbook.
+
+        Args:
+            rules: List of :class:`AutoFixer` instances (default: all built-in fixers).
+            dry_run: If ``True``, plan changes but do not apply them.
+
+        Returns:
+            List of :class:`FixAction` describing all changes.
+        """
+        from pytableau.xml.fixers import _ALL_FIXERS
+        fixers = rules if rules is not None else _ALL_FIXERS
+        return [action for fixer in fixers for action in fixer.fix(self, dry_run=dry_run)]
+
+    def swap_connection(self, where=None, **kwargs) -> SwapResult:
+        """Swap connection properties across all (or matching) datasources.
+
+        Args:
+            where: Optional callable ``(Datasource) -> bool`` to filter datasources.
+            **kwargs: Connection attributes to update (server, dbname, username, port).
+
+        Returns:
+            A :class:`SwapResult` with counts and per-datasource details.
+        """
+        updated = 0
+        skipped = 0
+        details = []
+        for ds in self.datasources:
+            if where is not None and not where(ds):
+                skipped += 1
+                continue
+            ds.swap_connection(**kwargs)
+            updated += 1
+            details.append({"datasource": ds.name, "applied": kwargs})
+        return SwapResult(updated_count=updated, skipped_count=skipped, details=details)
+
+    def promote(
+        self,
+        from_env: str,
+        to_env: str,
+        config: PromotionConfig,
+        *,
+        dry_run: bool = False,
+    ) -> list[PromotionChange]:
+        """Promote this workbook from one environment to another.
+
+        Args:
+            from_env: Name of the source environment in *config*.
+            to_env: Name of the target environment in *config*.
+            config: A :class:`PromotionConfig` describing environment specs.
+            dry_run: If ``True``, plan changes but do not apply them.
+
+        Returns:
+            List of :class:`PromotionChange` describing each attribute change.
+        """
+        from pytableau.package.promotion import PromotionChange
+
+        target = config.environments.get(to_env)
+        if target is None:
+            raise ValueError(f"Unknown environment '{to_env}' in promotion config.")
+
+        changes: list[PromotionChange] = []
+
+        for ds in self.datasources:
+            for idx, conn in enumerate(ds.connections):
+                spec_attrs = {
+                    "server": target.server,
+                    "dbname": target.dbname,
+                    "username": target.username,
+                    "port": str(target.port) if target.port is not None else None,
+                }
+                for attr, new_val in spec_attrs.items():
+                    if new_val is None:
+                        continue
+                    old_val = conn.xml_node.get(attr) or conn.xml_node.get(
+                        "dbName" if attr == "dbname" else attr
+                    )
+                    if old_val == new_val:
+                        continue
+                    changes.append(PromotionChange(
+                        datasource=ds.name,
+                        connection=idx,
+                        attribute=attr,
+                        old_value=old_val,
+                        new_value=new_val,
+                    ))
+                    if not dry_run:
+                        conn.xml_node.set(attr, new_val)
+
+        return changes
+
     def _load_tree(self, tree: etree._ElementTree) -> None:
         self._tree = tree
         root = tree.getroot()
@@ -268,18 +510,21 @@ class Workbook:
             pretty_print=True,
         )
 
-    def save(self) -> None:
+    def save(self, *, scrub_credentials: bool = True) -> None:
         """Save the workbook to its original path."""
         if not self._path:
             raise InvalidWorkbookError("Workbook path is unknown; use save_as().")
+        self.save_as(self._path, scrub_credentials=scrub_credentials)
 
-        self.save_as(self._path)
-
-    def save_as(self, path: str | Path) -> None:
+    def save_as(self, path: str | Path, *, scrub_credentials: bool = True) -> None:
         """Save the workbook to a new path."""
         destination = Path(path).expanduser()
         if destination.suffix.lower() not in {".twb", ".twbx"}:
             raise InvalidWorkbookError("Workbook path must end with .twb or .twbx")
+
+        if scrub_credentials:
+            for ds in self.datasources:
+                ds.scrub_credentials()
 
         issues = self._validate_for_save()
         for issue in issues:
@@ -347,6 +592,13 @@ class Workbook:
         )
         return xml.decode("utf-8")
 
-    def validate(self) -> list[ValidationIssue]:
-        """Validate the workbook XML against known schema rules."""
-        return self._validate_for_save()
+    def validate(self, profile=None) -> list[ValidationIssue]:
+        """Validate the workbook XML against known schema rules.
+
+        Args:
+            profile: Optional :class:`ValidationProfile` to run additional rules.
+        """
+        issues = self._validate_for_save()
+        if profile is not None:
+            issues.extend(profile.check(self))
+        return issues

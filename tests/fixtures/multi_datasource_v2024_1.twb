@@ -1,0 +1,31 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<workbook source-build="20241.24.0320.0919" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="sqlserver.orders" caption="Orders DB">
+      <connection class="sqlserver" server="orders.db.example.com" dbname="orders" username="reader"/>
+      <columns>
+        <column name="[OrderID]" caption="OrderID" datatype="integer" role="dimension" type="ordinal"/>
+        <column name="[Amount]" caption="Amount" datatype="real" role="measure" type="quantitative"/>
+      </columns>
+    </datasource>
+    <datasource name="postgres.crm" caption="CRM">
+      <connection class="postgres" server="crm.example.com" dbname="crm" username="analyst"/>
+      <columns>
+        <column name="[CustomerID]" caption="CustomerID" datatype="integer" role="dimension" type="ordinal"/>
+        <column name="[Segment]" caption="Segment" datatype="string" role="dimension" type="nominal"/>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Combined View">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.orders"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards/>
+</workbook>

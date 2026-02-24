@@ -1,0 +1,34 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<workbook source-build="20231.23.0321.0414" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="postgres.public" caption="Orders">
+      <connection class="postgres" server="db.example.com" dbname="orders" username="analyst" port="5432"/>
+      <columns>
+        <column name="[Order ID]" caption="Order ID" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Customer]" caption="Customer" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Revenue]" caption="Revenue" datatype="real" role="measure" type="quantitative"/>
+        <column name="[Calc_1]" caption="Profit Ratio" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="[Revenue] / [Cost]"/>
+        </column>
+        <column name="[Cost]" caption="Cost" datatype="real" role="measure" type="quantitative"/>
+      </columns>
+      <filters>
+        <filter class="categorical" column="[Customer]">
+          <groupfilter function="member" member="ACME Corp"/>
+        </filter>
+      </filters>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Revenue by Customer">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="postgres.public"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards/>
+</workbook>

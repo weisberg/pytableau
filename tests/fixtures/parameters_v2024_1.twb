@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<workbook source-build="20241.24.0320.0919" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="Parameters">
+      <columns>
+        <column name="[Parameter 1]" caption="Top N" datatype="integer" param-domain-type="range" role="measure" type="quantitative">
+          <domain range-min="1" range-max="100" range-step="1"/>
+        </column>
+        <column name="[Parameter 2]" caption="Region Filter" datatype="string" param-domain-type="list" role="dimension" type="nominal">
+          <domain>
+            <member value="East"/>
+            <member value="West"/>
+            <member value="North"/>
+            <member value="South"/>
+          </domain>
+        </column>
+        <column name="[Parameter 3]" caption="Date Range" datatype="date" param-domain-type="all" role="dimension" type="nominal"/>
+      </columns>
+    </datasource>
+    <datasource name="sqlserver.sales" caption="Sales">
+      <connection class="sqlserver" server="dev.example.com" dbname="sales" username="reader"/>
+      <columns>
+        <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative"/>
+        <column name="[Region]" caption="Region" datatype="string" role="dimension" type="nominal"/>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Parameterized View">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.sales"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards/>
+</workbook>

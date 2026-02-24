@@ -1,0 +1,40 @@
+<?xml version='1.0' encoding='UTF-8'?>
+<workbook source-build="20241.24.0320.0919" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="sqlserver.sales" caption="Sales">
+      <connection class="sqlserver" server="dev.example.com" dbname="sales" username="reader"/>
+      <columns>
+        <column name="[Customer]" caption="Customer" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Region]" caption="Region" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative"/>
+        <column name="[LOD_1]" caption="Sales per Customer" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="{ FIXED [Customer]: SUM([Sales]) }"/>
+        </column>
+        <column name="[LOD_2]" caption="Sales per Region" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="{ FIXED [Region]: SUM([Sales]) }"/>
+        </column>
+        <column name="[LOD_3]" caption="Include Sales" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="{ INCLUDE [Customer]: AVG([Sales]) }"/>
+        </column>
+        <column name="[LOD_4]" caption="Exclude Region" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="{ EXCLUDE [Region]: SUM([Sales]) }"/>
+        </column>
+        <column name="[LOD_5]" caption="Nested LOD" datatype="real" role="measure" type="quantitative">
+          <calculation class="tableau" formula="{ FIXED [Customer]: { FIXED [Region]: SUM([Sales]) } }"/>
+        </column>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="LOD Analysis">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.sales"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards/>
+</workbook>
