@@ -7,6 +7,65 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.0] — 2026-02-24
+
+### Added
+
+#### Programmatic Viz Authoring (`build/`)
+- `DatasourceBuilder`, `WorksheetBuilder`, `DashboardBuilder` — fluent APIs for building workbooks entirely from code.
+- `from_spec()` — load a full workbook from a Python dict, YAML file, or JSON file.
+- `quick_chart()`, `quick_dashboard()` — one-liner shortcuts for common chart types.
+- `Theme` — apply font families and color palettes programmatically.
+- `Workbook.add_worksheet()` and `Workbook.add_dashboard()` — accept builder instances or raw lxml elements.
+- `Workbook.from_spec()` — classmethod alias for `pytableau.build.from_spec()`.
+
+#### Agent Ergonomics (`agents/`)
+- `wb.describe()` — structured workbook schema as a JSON-safe dict, ready to pass to an LLM or automation layer.
+- `wb.capabilities()` — installed extras + content summary (counts of fields, sheets, etc.).
+- `wb.transaction()` — atomic multi-step mutations with automatic XML rollback on any exception.
+- `ds.available_fields()` — flat field list for agents and automation pipelines.
+- `OperationReceipt` — structured mutation result with `status`, `field_name`, `datasource`, `suggestion`, and `.ok` property.
+- `PyTableauError.suggestion` — corrective hints propagated across the full exception hierarchy; `FieldNotFoundError` now suggests close-match field names.
+
+#### Fleet Operations (`fleet/`)
+- `FleetScanner` — scan hundreds of workbooks in one pass: complexity grade, connection inventory, deprecated function detection, lint issues.
+- `WorkbookScan` — per-workbook result dataclass (path, status, complexity_grade, issue counts, etc.).
+- `MigrationPlan` — fluent builder for bulk migrations: `swap_connections()`, `rename_fields()`, `validate_all()`.
+- `MigrationEngine` — execute a `MigrationPlan` with full dry-run support; returns `MigrationReport`.
+- `ComplianceRunner` — run a `GovernanceRuleset` against an entire directory; exports JUnit XML for CI/CD.
+- `ContractRunner` — validate workbooks against YAML contract files (required datasources, worksheets, dashboards, formulas); exports JUnit XML.
+- `FleetReport` — standalone HTML fleet health dashboard with summary cards, issue table, and per-workbook detail.
+- CLI commands: `pytableau fleet-scan`, `pytableau comply`, `pytableau migrate`, `pytableau contract-test`.
+
+#### Polish
+- `Workbook.audit_connections()` — returns all connection strings (server, dbname, username, port) without passwords, for security review.
+- `WorkbookDiff.to_changelog()` — render any semantic diff as Keep-a-Changelog Markdown (Added / Changed / Removed sections).
+- `Datasource.upsert_extract()` — incremental extract refresh via DELETE+INSERT pattern; delegates to `ExtractManager.upsert()`.
+- `Workbook.apply_theme()` — write a `Theme` object into the workbook's `<preferences>` XML node.
+
+### Changed
+- **BREAKING**: Minimum Python version raised to 3.11 (Python 3.10 dropped).
+- **BREAKING**: `pytableau.exceptions.ConnectionError` renamed to `TableauConnectionError` (backwards-compat alias retained for one major cycle).
+- `WorkbookDiff._diff_datasource` now uses `ds.all_fields` instead of `ds.fields` so calculated fields appear in diffs and changelogs.
+- Development status classifier updated to `5 - Production/Stable`.
+- `[build]` optional extra added (`pyyaml>=6.0`) for YAML spec support.
+- `[all]` extra now includes `build`.
+- 56 GitHub issues closed across v1.0.0 through v2.0.0.
+
+### Migration from v1.x
+- Replace `from pytableau.exceptions import ConnectionError` with `from pytableau.exceptions import TableauConnectionError`.
+- Ensure Python ≥ 3.11 is installed.
+
+---
+
+## [2.0.0a2] — 2026-02-24
+
+### Added
+- `agents/` package: `describe()`, `available_fields()`, `capabilities()`, `WorkbookTransaction`, `OperationReceipt`.
+- `PyTableauError.suggestion` field with close-match hints on `FieldNotFoundError`.
+
+---
+
 ## [2.0.0a1] — 2026-02-24
 
 ### Added
