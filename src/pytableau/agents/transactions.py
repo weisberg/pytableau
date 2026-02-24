@@ -16,7 +16,9 @@ Example::
 from __future__ import annotations
 
 import copy
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
+
+from lxml import etree
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
@@ -34,11 +36,9 @@ class WorkbookTransaction:
 
     def __init__(self, workbook: Workbook) -> None:
         self._workbook = workbook
-        self._snapshot = None
+        self._snapshot: etree._ElementTree | None = None
 
     def __enter__(self) -> WorkbookTransaction:
-        from lxml import etree
-
         root_copy = copy.deepcopy(self._workbook.xml_root)
         self._snapshot = etree.ElementTree(root_copy)
         return self
@@ -48,17 +48,16 @@ class WorkbookTransaction:
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
         exc_tb: object,
-    ) -> bool:
+    ) -> None:
         if exc_type is not None and self._snapshot is not None:
             # Rollback to the snapshot taken on __enter__
-            self._workbook._load_tree(self._snapshot)  # type: ignore[attr-defined]
-        return False  # do not suppress the exception
+            self._workbook._load_tree(self._snapshot)
 
     # ------------------------------------------------------------------
     # Delegation helpers — keep parity with common Datasource mutations
     # ------------------------------------------------------------------
 
-    def _ds(self, datasource_name: str):  # type: ignore[return]
+    def _ds(self, datasource_name: str) -> Any:
         """Resolve datasource by name (raises DatasourceNotFoundError on miss)."""
         return self._workbook.datasources[datasource_name]
 

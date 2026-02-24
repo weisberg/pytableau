@@ -149,7 +149,7 @@ class DatasourceBuilder:
             TypeError: If *df* is not a DataFrame.
         """
         try:
-            import pandas as pd
+            import pandas as pd  # type: ignore[import-untyped]
         except ImportError as exc:
             raise ImportError(
                 "pandas is required for DatasourceBuilder.from_dataframe(). "

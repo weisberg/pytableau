@@ -18,7 +18,10 @@ from __future__ import annotations
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from pytableau.governance.rules import GovernanceRuleset
 
 
 @dataclass
@@ -37,7 +40,7 @@ class ComplianceResult:
         }
 
 
-def load_compliance_config(path: str | Path):  # type: ignore[return]
+def load_compliance_config(path: str | Path) -> GovernanceRuleset:
     """Load a YAML compliance config and return a :class:`~pytableau.governance.GovernanceRuleset`.
 
     The YAML format mirrors the governance module's ruleset format::

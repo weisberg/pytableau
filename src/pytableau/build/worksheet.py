@@ -284,19 +284,19 @@ class WorksheetBuilder:
         # Filters
         if self._filters:
             filters_el = etree.SubElement(ws, "filters")
-            for spec in self._filters:
-                spec.to_xml(filters_el)
+            for filt_spec in self._filters:
+                filt_spec.to_xml(filters_el)
 
         # Sorts
         if self._sorts:
             sorts_el = etree.SubElement(ws, "sorts")
-            for spec in self._sorts:
+            for sort_spec in self._sorts:
                 sort_attrs: dict[str, str] = {
-                    "field": encode_shelf_field(spec.field),
-                    "direction": "DESC" if spec.descending else "ASC",
+                    "field": encode_shelf_field(sort_spec.field),
+                    "direction": "DESC" if sort_spec.descending else "ASC",
                 }
-                if spec.by:
-                    sort_attrs["using"] = encode_shelf_field(spec.by)
+                if sort_spec.by:
+                    sort_attrs["using"] = encode_shelf_field(sort_spec.by)
                 etree.SubElement(sorts_el, "sort", attrib=sort_attrs)
 
         # Datasource dependencies

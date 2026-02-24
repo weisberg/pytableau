@@ -264,8 +264,8 @@ class DashboardBuilder:
         # Zones
         if self._zones:
             zones_el = etree.SubElement(dash, "zones")
-            for spec in self._zones:
-                spec.to_xml(zones_el)
+            for zone_spec in self._zones:
+                zone_spec.to_xml(zones_el)
 
         # Device layouts
         if self._device_layouts:
@@ -273,14 +273,14 @@ class DashboardBuilder:
             for device_name, device_zones in self._device_layouts.items():
                 layout = etree.SubElement(layouts_el, "devicelayout", name=device_name)
                 dz_el = etree.SubElement(layout, "zones")
-                for spec in device_zones:
-                    spec.to_xml(dz_el)
+                for zone_spec in device_zones:
+                    zone_spec.to_xml(dz_el)
 
         # Actions
         if self._actions:
             actions_el = etree.SubElement(dash, "actions")
-            for spec in self._actions:
-                spec.to_xml(actions_el)
+            for action_spec in self._actions:
+                action_spec.to_xml(actions_el)
 
         return dash
 

@@ -54,7 +54,7 @@ def _load_data(spec: str | Path | dict[str, Any]) -> dict[str, Any]:
 
     # Try YAML first (superset of JSON)
     try:
-        import yaml
+        import yaml  # type: ignore[import-untyped]
 
         data = yaml.safe_load(text)
         if isinstance(data, dict):
@@ -182,7 +182,7 @@ def _build_worksheet(ws_spec: dict[str, Any], ds_internal_name: str | None) -> W
         elif isinstance(sort, dict):
             builder.sort(
                 sort["field"],
-                descending=sort.get("descending", sort.get("desc", False)),
+                descending=bool(sort.get("descending", sort.get("desc", False))),
                 by=sort.get("by"),
             )
 
@@ -252,42 +252,42 @@ def _build_dashboard(dash_spec: dict[str, Any]) -> DashboardBuilder:
     # Phone layout
     phone = dash_spec.get("phone_layout")
     if phone:
-        tuples = []
+        phone_tuples: list[tuple[str, int, int, int, int]] = []
         for z in phone:
             if isinstance(z, dict):
-                tuples.append(
+                phone_tuples.append(
                     (
-                        z.get("worksheet", z.get("sheet", "")),
-                        int(z.get("x", 0)),
-                        int(z.get("y", 0)),
-                        int(z.get("w", z.get("width", 320))),
-                        int(z.get("h", z.get("height", 300))),
+                        str(z.get("worksheet") or z.get("sheet") or ""),
+                        int(z.get("x") or 0),
+                        int(z.get("y") or 0),
+                        int(z.get("w") or z.get("width") or 320),
+                        int(z.get("h") or z.get("height") or 300),
                     )
                 )
             elif isinstance(z, (list, tuple)) and len(z) >= 5:
-                tuples.append(tuple(z[:5]))
-        if tuples:
-            builder.phone_layout(tuples)
+                phone_tuples.append((str(z[0]), int(z[1]), int(z[2]), int(z[3]), int(z[4])))
+        if phone_tuples:
+            builder.phone_layout(phone_tuples)
 
     # Tablet layout
     tablet = dash_spec.get("tablet_layout")
     if tablet:
-        tuples = []
+        tablet_tuples: list[tuple[str, int, int, int, int]] = []
         for z in tablet:
             if isinstance(z, dict):
-                tuples.append(
+                tablet_tuples.append(
                     (
-                        z.get("worksheet", z.get("sheet", "")),
-                        int(z.get("x", 0)),
-                        int(z.get("y", 0)),
-                        int(z.get("w", z.get("width", 768))),
-                        int(z.get("h", z.get("height", 500))),
+                        str(z.get("worksheet") or z.get("sheet") or ""),
+                        int(z.get("x") or 0),
+                        int(z.get("y") or 0),
+                        int(z.get("w") or z.get("width") or 768),
+                        int(z.get("h") or z.get("height") or 500),
                     )
                 )
             elif isinstance(z, (list, tuple)) and len(z) >= 5:
-                tuples.append(tuple(z[:5]))
-        if tuples:
-            builder.tablet_layout(tuples)
+                tablet_tuples.append((str(z[0]), int(z[1]), int(z[2]), int(z[3]), int(z[4])))
+        if tablet_tuples:
+            builder.tablet_layout(tablet_tuples)
 
     return builder
 
@@ -335,8 +335,8 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
     for ws_spec in data.get("worksheets", []):
         ds_caption = ws_spec.get("datasource")
         ds_internal = ds_caption_to_name.get(ds_caption, ds_caption) if ds_caption else None
-        builder = _build_worksheet(ws_spec, ds_internal)
-        node = builder.build()
+        ws_builder = _build_worksheet(ws_spec, ds_internal)
+        node = ws_builder.build()
         container = wb.xml_root.find("worksheets")
         if container is None:
             from lxml import etree
@@ -346,8 +346,8 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
 
     # Phase 3: dashboards
     for dash_spec in data.get("dashboards", []):
-        builder = _build_dashboard(dash_spec)
-        node = builder.build()
+        dash_builder = _build_dashboard(dash_spec)
+        node = dash_builder.build()
         container = wb.xml_root.find("dashboards")
         if container is None:
             from lxml import etree
