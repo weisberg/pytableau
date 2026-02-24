@@ -1,0 +1,33 @@
+{
+  "dashboards": [],
+  "datasources": {
+    "sqlserver.sales": {
+      "calculated_fields": {},
+      "caption": "Sales",
+      "connections": [
+        {
+          "class": "sqlserver",
+          "dbname": "sales",
+          "server": "dev.example.com",
+          "username": "reader"
+        }
+      ],
+      "fields": {
+        "Region": {
+          "datatype": "string",
+          "hidden": false,
+          "role": "dimension"
+        },
+        "Sales": {
+          "datatype": "real",
+          "hidden": false,
+          "role": "measure"
+        }
+      }
+    }
+  },
+  "version": "2024.1",
+  "worksheets": [
+    "Sheet 1"
+  ]
+}

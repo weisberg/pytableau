@@ -321,6 +321,77 @@ class Workbook:
         container.append(node)
         self._load_tree(self.xml_tree)
 
+    def audit_connections(self) -> list[dict[str, Any]]:
+        """Return a list of all connection details for security review.
+
+        Each entry is a dict with keys: ``datasource``, ``class_``, ``server``,
+        ``dbname``, ``username``, ``port``.  Passwords and tokens are never
+        included (they are scrubbed before any save operation).
+
+        Useful for a security audit of all live connection strings in the workbook.
+        """
+        results: list[dict[str, Any]] = []
+        for ds in self.datasources:
+            if ds.is_parameters:
+                continue
+            for conn in ds.connections:
+                results.append(
+                    {
+                        "datasource": ds.name,
+                        "class_": conn.class_,
+                        "server": conn.server,
+                        "dbname": conn.dbname,
+                        "username": conn.username,
+                        "port": conn.port,
+                    }
+                )
+        return results
+
+    def apply_theme(self, theme: Any) -> None:
+        """Apply a :class:`~pytableau.build.theme.Theme` to this workbook.
+
+        Sets the ``<preferences>`` block in the XML with the theme's font family,
+        font size, and colour palette.  Existing preferences are replaced.
+
+        Args:
+            theme: A :class:`~pytableau.build.theme.Theme` instance.
+        """
+        root = self.xml_root
+        # Remove existing preferences node if present
+        existing = root.find("preferences")
+        if existing is not None:
+            root.remove(existing)
+
+        from lxml import etree as _etree
+
+        prefs = _etree.SubElement(root, "preferences")
+        if theme.font_family or theme.font_size:
+            _etree.SubElement(
+                prefs,
+                "color-palette",
+                attrib={
+                    "name": theme.name,
+                    "type": "ordered-sequential",
+                },
+            )
+        if theme.font_family:
+            _etree.SubElement(
+                prefs,
+                "text-format",
+                attrib={
+                    "font-family": theme.font_family,
+                    "font-size": str(theme.font_size),
+                },
+            )
+        if theme.colors:
+            palette = _etree.SubElement(
+                prefs,
+                "color-palette",
+                attrib={"name": f"{theme.name}-colors", "type": "regular"},
+            )
+            for color in theme.colors:
+                _etree.SubElement(palette, "color").text = str(color)
+
     def describe(self) -> dict[str, Any]:
         """Return a complete structured schema of this workbook as a plain dict.
 

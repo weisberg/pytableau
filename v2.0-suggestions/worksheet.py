@@ -19,7 +19,8 @@ Example::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
@@ -259,7 +260,7 @@ class WorksheetBuilder:
 
         # Mark type (stored as a style attribute)
         if self._mark_type and self._mark_type != MarkType.AUTOMATIC.value:
-            etree.SubElement(ws, "style", mark=self._mark_type)
+            style = etree.SubElement(ws, "style", mark=self._mark_type)
 
         # Rows and Columns shelves
         rows_el = etree.SubElement(ws, "rows")

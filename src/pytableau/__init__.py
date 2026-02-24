@@ -66,6 +66,15 @@ from pytableau.exceptions import (
     ValidationIssue,
     XMLError,
 )
+from pytableau.fleet import (
+    ComplianceRunner,
+    ContractRunner,
+    FleetReport,
+    FleetScanner,
+    MigrationEngine,
+    MigrationPlan,
+    WorkbookScan,
+)
 from pytableau.governance import (
     GovernanceLintIssue,
     GovernanceRuleset,
@@ -134,6 +143,14 @@ __all__ = [
     # Agents
     "OperationReceipt",
     "WorkbookTransaction",
+    # Fleet
+    "FleetScanner",
+    "WorkbookScan",
+    "MigrationPlan",
+    "MigrationEngine",
+    "ComplianceRunner",
+    "ContractRunner",
+    "FleetReport",
     # Governance
     "WorkbookIndex",
     "GovernanceLintIssue",

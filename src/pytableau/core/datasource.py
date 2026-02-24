@@ -401,6 +401,25 @@ class Datasource(XMLNodeProxy):
     def attach_extract(self, path: Path | str) -> None:
         self._extract_manager.attach(self, path)
 
+    def upsert_extract(
+        self,
+        df: object,
+        *,
+        table: str = "Extract",
+        key_columns: list[str] | None = None,
+    ) -> int:
+        """Incrementally upsert rows into an existing extract (incremental refresh).
+
+        Matches existing rows by *key_columns* and replaces them; new rows are
+        appended.  If *key_columns* is ``None`` all rows are appended.
+
+        Requires the ``hyper`` optional extra.
+
+        Returns:
+            Number of rows written.
+        """
+        return self._extract_manager.upsert(self, df, table=table, key_columns=key_columns)
+
     def detach_extract(self) -> None:
         self._extract_manager.detach(self)
 

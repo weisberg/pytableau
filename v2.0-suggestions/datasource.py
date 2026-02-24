@@ -17,7 +17,7 @@ Example::
 
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -129,9 +129,7 @@ class DatasourceBuilder:
 
         dt = datatype.value if isinstance(datatype, DataType) else str(datatype)
         r = role.value if isinstance(role, Role) else str(role)
-        self._calc_fields.append(
-            _CalcFieldSpec(caption=caption, formula=formula, datatype=dt, role=r)
-        )
+        self._calc_fields.append(_CalcFieldSpec(caption=caption, formula=formula, datatype=dt, role=r))
         return self
 
     # -- Classmethods --------------------------------------------------------
@@ -161,25 +159,9 @@ class DatasourceBuilder:
 
         # Heuristic column names that should be dimensions even when numeric
         _DIMENSION_HINTS = {
-            "id",
-            "key",
-            "code",
-            "name",
-            "category",
-            "type",
-            "region",
-            "state",
-            "country",
-            "city",
-            "zip",
-            "postal",
-            "status",
-            "group",
-            "segment",
-            "class",
-            "tier",
-            "level",
-            "flag",
+            "id", "key", "code", "name", "category", "type", "region",
+            "state", "country", "city", "zip", "postal", "status", "group",
+            "segment", "class", "tier", "level", "flag",
         }
 
         builder = cls(caption)
@@ -223,7 +205,7 @@ class DatasourceBuilder:
             ImportError: If tableauhyperapi is not installed.
         """
         try:
-            from tableauhyperapi import Connection, HyperProcess, Telemetry
+            from tableauhyperapi import HyperProcess, Telemetry, Connection, TableName
         except ImportError as exc:
             raise ImportError(
                 "tableauhyperapi is required for DatasourceBuilder.from_hyper(). "
@@ -254,9 +236,8 @@ class DatasourceBuilder:
             "NUMERIC": (DataType.REAL, Role.MEASURE),
         }
 
-        with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp, Connection(
-            hp.endpoint, str(path)
-        ) as conn:
+        with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp:
+            with Connection(hp.endpoint, str(path)) as conn:
                 for schema in conn.catalog.get_schema_names():
                     for table in conn.catalog.get_table_names(schema):
                         defn = conn.catalog.get_table_definition(table)
@@ -320,9 +301,7 @@ class DatasourceBuilder:
                 "type": make_column_type(calc.role),
             }
             col = etree.SubElement(columns, "column", attrib=attrs)
-            etree.SubElement(
-                col, "calculation", attrib={"class": "tableau", "formula": calc.formula}
-            )
+            etree.SubElement(col, "calculation", attrib={"class": "tableau", "formula": calc.formula})
 
         return ds
 

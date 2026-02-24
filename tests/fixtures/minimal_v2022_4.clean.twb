@@ -1,0 +1,23 @@
+<workbook source-build="20224.22.1014.1148" source-platform="win" version="18.1">
+  <datasources>
+    <datasource name="sqlserver.sales" caption="Sales">
+      <connection class="sqlserver" server="dev.example.com" dbname="sales" username="reader" password="keepme"/>
+      <columns>
+        <column name="[Region]" caption="Region" datatype="string" role="dimension" type="nominal"/>
+        <column name="[Sales]" caption="Sales" datatype="real" role="measure" type="quantitative"/>
+      </columns>
+    </datasource>
+  </datasources>
+  <worksheets>
+    <worksheet name="Sheet 1">
+      <table>
+        <view>
+          <datasources>
+            <datasource name="sqlserver.sales"/>
+          </datasources>
+        </view>
+      </table>
+    </worksheet>
+  </worksheets>
+  <dashboards/>
+</workbook>

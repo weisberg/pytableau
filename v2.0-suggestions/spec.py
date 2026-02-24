@@ -34,7 +34,7 @@ import json
 from pathlib import Path
 from typing import Any
 
-from pytableau.constants import DataType, Role
+from pytableau.constants import DataType, FilterType, Role
 from pytableau.exceptions import InvalidWorkbookError
 
 from .dashboard import DashboardBuilder
@@ -49,8 +49,12 @@ def _load_data(spec: str | Path | dict[str, Any]) -> dict[str, Any]:
 
     path = Path(spec) if not isinstance(spec, Path) else spec
 
-    # Try as a file path first, otherwise treat as a raw YAML/JSON string
-    text = path.read_text(encoding="utf-8") if path.exists() else str(spec)
+    # Try as a file path first
+    if path.exists():
+        text = path.read_text(encoding="utf-8")
+    else:
+        # Treat as a raw YAML/JSON string
+        text = str(spec)
 
     # Try YAML first (superset of JSON)
     try:
@@ -217,22 +221,8 @@ def _build_dashboard(dash_spec: dict[str, Any]) -> DashboardBuilder:
         text_content = zone.get("text")
         x = int(zone.get("x", zone.get("position", [0])[0] if "position" in zone else 0))
         y = int(zone.get("y", zone.get("position", [0, 0])[1] if "position" in zone else 0))
-        w = int(
-            zone.get(
-                "w",
-                zone.get(
-                    "width", zone.get("position", [0, 0, 600])[2] if "position" in zone else 600
-                ),
-            )
-        )
-        h = int(
-            zone.get(
-                "h",
-                zone.get(
-                    "height", zone.get("position", [0, 0, 0, 400])[3] if "position" in zone else 400
-                ),
-            )
-        )
+        w = int(zone.get("w", zone.get("width", zone.get("position", [0, 0, 600])[2] if "position" in zone else 600)))
+        h = int(zone.get("h", zone.get("height", zone.get("position", [0, 0, 0, 400])[3] if "position" in zone else 400)))
 
         if ws_name:
             builder.sheet(ws_name, x=x, y=y, w=w, h=h)
@@ -255,15 +245,13 @@ def _build_dashboard(dash_spec: dict[str, Any]) -> DashboardBuilder:
         tuples = []
         for z in phone:
             if isinstance(z, dict):
-                tuples.append(
-                    (
-                        z.get("worksheet", z.get("sheet", "")),
-                        int(z.get("x", 0)),
-                        int(z.get("y", 0)),
-                        int(z.get("w", z.get("width", 320))),
-                        int(z.get("h", z.get("height", 300))),
-                    )
-                )
+                tuples.append((
+                    z.get("worksheet", z.get("sheet", "")),
+                    int(z.get("x", 0)),
+                    int(z.get("y", 0)),
+                    int(z.get("w", z.get("width", 320))),
+                    int(z.get("h", z.get("height", 300))),
+                ))
             elif isinstance(z, (list, tuple)) and len(z) >= 5:
                 tuples.append(tuple(z[:5]))
         if tuples:
@@ -275,15 +263,13 @@ def _build_dashboard(dash_spec: dict[str, Any]) -> DashboardBuilder:
         tuples = []
         for z in tablet:
             if isinstance(z, dict):
-                tuples.append(
-                    (
-                        z.get("worksheet", z.get("sheet", "")),
-                        int(z.get("x", 0)),
-                        int(z.get("y", 0)),
-                        int(z.get("w", z.get("width", 768))),
-                        int(z.get("h", z.get("height", 500))),
-                    )
-                )
+                tuples.append((
+                    z.get("worksheet", z.get("sheet", "")),
+                    int(z.get("x", 0)),
+                    int(z.get("y", 0)),
+                    int(z.get("w", z.get("width", 768))),
+                    int(z.get("h", z.get("height", 500))),
+                ))
             elif isinstance(z, (list, tuple)) and len(z) >= 5:
                 tuples.append(tuple(z[:5]))
         if tuples:
@@ -325,7 +311,6 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
         container = wb.xml_root.find("datasources")
         if container is None:
             from lxml import etree
-
             container = etree.SubElement(wb.xml_root, "datasources")
         container.append(node)
         caption = ds_spec.get("caption") or ds_spec.get("name", "Data")
@@ -340,7 +325,6 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
         container = wb.xml_root.find("worksheets")
         if container is None:
             from lxml import etree
-
             container = etree.SubElement(wb.xml_root, "worksheets")
         container.append(node)
 
@@ -351,7 +335,6 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
         container = wb.xml_root.find("dashboards")
         if container is None:
             from lxml import etree
-
             container = etree.SubElement(wb.xml_root, "dashboards")
         container.append(node)
 

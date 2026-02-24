@@ -925,3 +925,138 @@ def search_index(
         if kind == "connection":
             return idx.search_connection(term)
         return idx.search_field(term)
+
+
+# ---------------------------------------------------------------------------
+# Fleet commands
+# ---------------------------------------------------------------------------
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def fleet_scan(
+    directory: Annotated[Path, Argument(help="Directory containing workbooks")],
+    output: Annotated[
+        Path | None, Option("--output", "-o", help="Write HTML report to this path")
+    ] = None,
+    pattern: Annotated[
+        str, Option("--pattern", help="Glob pattern for workbook files")
+    ] = "**/*.tw[bx]",
+) -> dict:
+    """Scan a directory of workbooks and report fleet health metrics."""
+    from pytableau.fleet import FleetScanner
+
+    scanner = FleetScanner(directory, pattern=pattern)
+    scanner.scan()
+    if output is not None:
+        scanner.report().to_html(output)
+    return scanner.summary()
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def comply(
+    directory: Annotated[Path, Argument(help="Directory containing workbooks")],
+    ruleset: Annotated[
+        Path | None, Option("--ruleset", "-r", help="YAML compliance ruleset file")
+    ] = None,
+    exit_code: Annotated[
+        bool, Option("--exit-code", help="Exit with code 1 if any errors found")
+    ] = False,
+    junit_xml: Annotated[
+        bool, Option("--junit-xml", help="Output JUnit XML instead of JSON")
+    ] = False,
+) -> dict | str:
+    """Run a governance compliance check against a fleet of workbooks."""
+    import sys
+
+    from pytableau.fleet.compliance import ComplianceRunner, load_compliance_config
+    from pytableau.governance.rules import GovernanceRuleset
+
+    rs = load_compliance_config(ruleset) if ruleset else GovernanceRuleset.default()
+    runner = ComplianceRunner(rs)
+    results = runner.run(directory)
+
+    if junit_xml:
+        return runner.to_junit_xml(results)
+
+    passed = runner.passed(results)
+    output = {
+        "passed": passed,
+        "total": len(results),
+        "failures": sum(1 for r in results if not r.passed),
+        "results": [r.to_dict() for r in results],
+    }
+    if exit_code and not passed:
+        sys.exit(1)
+    return output
+
+
+@app.command(annotations=Destructive, supports_dry_run=True)
+def migrate(
+    source: Annotated[Path, Argument(help="Source directory of workbooks")],
+    output: Annotated[Path, Argument(help="Output directory for migrated workbooks")],
+    dry_run: bool = False,
+    swap_server: Annotated[
+        str | None,
+        Option("--swap-server", help="old=new server hostname swap (e.g. old-db.com=new-db.com)"),
+    ] = None,
+    rename_field: Annotated[
+        str | None,
+        Option("--rename-field", help="old=new field caption rename (e.g. 'Rev=Revenue')"),
+    ] = None,
+) -> dict:
+    """Migrate a fleet of workbooks — swap connections, rename fields."""
+    from pytableau.fleet.migrator import MigrationEngine, MigrationPlan
+
+    if dry_run:
+        record_dry_action("migrate", source=str(source), output=str(output))
+
+    plan = MigrationPlan().source_directory(source).output_directory(output)
+
+    if swap_server:
+        old, _, new = swap_server.partition("=")
+        plan.swap_connections({old.strip(): new.strip()})
+
+    if rename_field:
+        old, _, new = rename_field.partition("=")
+        plan.rename_fields({old.strip(): new.strip()})
+
+    if not dry_run:
+        report = MigrationEngine(plan).execute(dry_run=False)
+    else:
+        report = MigrationEngine(plan).execute(dry_run=True)
+
+    return report.to_dict()
+
+
+@app.command(annotations=ReadOnly | Idempotent)
+def contract_test(
+    contracts: Annotated[Path, Argument(help="Directory containing contract YAML files")],
+    workbooks: Annotated[Path, Argument(help="Directory containing workbooks")],
+    exit_code: Annotated[
+        bool, Option("--exit-code", help="Exit with code 1 if any contracts fail")
+    ] = False,
+    junit_xml: Annotated[
+        bool, Option("--junit-xml", help="Output JUnit XML instead of JSON")
+    ] = False,
+) -> dict | str:
+    """Run contract tests against a fleet of workbooks."""
+    import sys
+
+    from pytableau.fleet.contracts import ContractRunner
+
+    runner = ContractRunner(contracts)
+    results = runner.run(workbooks)
+
+    if junit_xml:
+        return runner.to_junit_xml(results)
+
+    passed = runner.passed(results)
+    output = {
+        "passed": passed,
+        "total": len(results),
+        "failures": sum(1 for r in results if not r.passed),
+        "results": [r.to_dict() for r in results],
+    }
+    if exit_code and not passed:
+        sys.exit(1)
+    return output

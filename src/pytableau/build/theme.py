@@ -11,8 +11,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-from pytableau.core.formatting import Color, Font
-
 
 @dataclass
 class Theme:

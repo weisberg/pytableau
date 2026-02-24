@@ -195,6 +195,68 @@ class WorkbookDiff:
         )
         return header + "".join(rows) + "</tbody></table>"
 
+    def to_changelog(self, *, version: str = "", date: str = "") -> str:
+        """Return a Keep-a-Changelog-style Markdown entry for this diff.
+
+        Example::
+
+            diff = diff_workbooks(old_wb, new_wb)
+            print(diff.to_changelog(version="1.2.0", date="2026-02-24"))
+        """
+        from datetime import date as _date
+
+        ver_line = f"## [{version}]" if version else "## [Unreleased]"
+        date_str = date or str(_date.today())
+        header = f"{ver_line} — {date_str}\n"
+
+        sections: dict[str, list[str]] = {
+            "Added": [],
+            "Changed": [],
+            "Removed": [],
+        }
+
+        if self.before_version != self.after_version:
+            sections["Changed"].append(
+                f"Workbook source version: `{self.before_version}` → `{self.after_version}`"
+            )
+
+        for name in self.datasources_added:
+            sections["Added"].append(f"Datasource `{name}`")
+        for name in self.datasources_removed:
+            sections["Removed"].append(f"Datasource `{name}`")
+        for name, ds in self.datasources_modified.items():
+            for f_name in ds.fields_added:
+                sections["Added"].append(f"Field `{f_name}` in datasource `{name}`")
+            for f_name in ds.fields_removed:
+                sections["Removed"].append(f"Field `{f_name}` from datasource `{name}`")
+            for caption, diffs in ds.fields_modified.items():
+                for fd in diffs:
+                    sections["Changed"].append(
+                        f"Field `{caption}`.{fd.attribute}: "
+                        f"`{fd.old_value}` → `{fd.new_value}` in `{name}`"
+                    )
+            for conn in ds.connections_modified:
+                sections["Changed"].append(f"Connection in `{name}`: {conn}")
+
+        for name in self.worksheets_added:
+            sections["Added"].append(f"Worksheet `{name}`")
+        for name in self.worksheets_removed:
+            sections["Removed"].append(f"Worksheet `{name}`")
+        for name in self.dashboards_added:
+            sections["Added"].append(f"Dashboard `{name}`")
+        for name in self.dashboards_removed:
+            sections["Removed"].append(f"Dashboard `{name}`")
+
+        if not any(sections.values()):
+            return header + "\n_No changes._\n"
+
+        body = ""
+        for section, items in sections.items():
+            if items:
+                body += f"\n### {section}\n\n"
+                body += "".join(f"- {item}\n" for item in items)
+        return header + body
+
 
 # ---------------------------------------------------------------------------
 # diff_workbooks
@@ -242,9 +304,9 @@ def diff_workbooks(before: Workbook, after: Workbook) -> WorkbookDiff:
 def _diff_datasource(name: str, b_ds: Any, a_ds: Any) -> DatasourceDiff:
     ds_diff = DatasourceDiff(name=name)
 
-    # Fields
-    b_fields = {f.caption: f for f in b_ds.fields}
-    a_fields = {f.caption: f for f in a_ds.fields}
+    # Fields (all_fields includes calculated fields)
+    b_fields = {f.caption: f for f in b_ds.all_fields}
+    a_fields = {f.caption: f for f in a_ds.all_fields}
     ds_diff.fields_added = sorted(set(a_fields) - set(b_fields))
     ds_diff.fields_removed = sorted(set(b_fields) - set(a_fields))
 

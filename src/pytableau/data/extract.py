@@ -75,6 +75,77 @@ class ExtractManager:
         connection._node.attrib.pop("dbclass", None)
         connection._node.attrib.pop("oauth", None)
 
+    def upsert(
+        self,
+        datasource,
+        df: object,
+        *,
+        table: str = "Extract",
+        key_columns: list[str] | None = None,
+    ) -> int:
+        """Incrementally upsert rows into an existing extract.
+
+        Matches existing rows by *key_columns* and updates them; new rows are
+        appended.  If *key_columns* is ``None`` all rows in *df* are appended
+        (equivalent to an ``INSERT``-only refresh).
+
+        Requires the ``hyper`` optional extra::
+
+            pip install "pytableau[hyper]"
+
+        Args:
+            datasource: The :class:`~pytableau.core.datasource.Datasource` with
+                an attached ``.hyper`` extract.
+            df: A :class:`pandas.DataFrame` containing the updated rows.
+            table: Table name inside the Hyper file.  Defaults to ``"Extract"``.
+            key_columns: Column names that uniquely identify a row.  When
+                provided, matching existing rows are deleted before inserting
+                the new data (DELETE + INSERT pattern).
+            Returns:
+                Number of rows written.
+        """
+        if datasource._hyper_path is None:
+            raise HyperError("No extract path is associated with this datasource.")
+
+        from pytableau._compat import import_optional
+
+        pd = import_optional("pandas", "pandas")
+        tableauhyperapi = import_optional("tableauhyperapi", "hyper")
+        HyperProcess = tableauhyperapi.HyperProcess
+        Telemetry = tableauhyperapi.Telemetry
+        Connection = tableauhyperapi.Connection
+        TableName = tableauhyperapi.TableName
+        pantab = import_optional("pantab", "hyper")
+
+        hyper_path = datasource._hyper_path
+        schema_name = "Extract"
+        tname = TableName(schema_name, table)
+
+        if key_columns:
+            # DELETE matching rows then re-insert (DELETE+INSERT upsert pattern)
+            with (
+                HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp,
+                Connection(hp.endpoint, str(hyper_path)) as conn,
+            ):
+                # Build DELETE predicate
+                conditions = " AND ".join(f'"{col}" = ?' for col in key_columns)
+                # Execute row-by-row deletion for matching keys
+                for _, row in pd.DataFrame(df)[key_columns].drop_duplicates().iterrows():
+                    values = [row[col] for col in key_columns]
+                    conn.execute_command(
+                        f"DELETE FROM {tname} WHERE {conditions}",
+                        parameters=values,
+                    )
+
+        # Append the new/updated rows
+        pantab.frame_to_hyper(
+            pd.DataFrame(df),
+            hyper_path,
+            table=tname,
+            table_mode="a",
+        )
+        return len(pd.DataFrame(df))
+
     def detach(self, datasource) -> None:
         """Convert extract-based datasource back to a live connection placeholder."""
         if not datasource.connections:
