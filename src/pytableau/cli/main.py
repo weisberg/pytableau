@@ -363,6 +363,9 @@ def version_migrate(
     output: Annotated[
         Path | None, Option("-o", help="Output path (default: overwrite input)")
     ] = None,
+    allow_unverified: Annotated[
+        bool, Option(help="Allow an unverified XML downgrade; unsupported features still fail")
+    ] = False,
 ) -> dict:
     """Migrate a workbook to a different Tableau version."""
     from pytableau.core.workbook import Workbook
@@ -381,7 +384,7 @@ def version_migrate(
 
     original_version = wb.version
     try:
-        wb.migrate_version(target_version)
+        wb.migrate_version(target_version, allow_unverified=allow_unverified)
         wb.save_as(destination)
     except ValueError as exc:
         raise InputError(str(exc)) from exc

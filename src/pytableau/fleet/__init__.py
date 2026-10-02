@@ -22,6 +22,7 @@ from pytableau.fleet.report import FleetReport
 from pytableau.fleet.scanner import FleetScanner, WorkbookScan
 
 __all__ = [
+    "MigrationManifest",
     "FleetScanner",
     "WorkbookScan",
     "MigrationPlan",
@@ -31,3 +32,5 @@ __all__ = [
     "ContractRunner",
     "FleetReport",
 ]
+
+from .journal import MigrationManifest

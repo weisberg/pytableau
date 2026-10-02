@@ -20,13 +20,19 @@ Example::
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import TYPE_CHECKING
 
 from lxml import etree
 
 from pytableau.constants import FilterType, MarkType
+from pytableau.core.formatting import FormatSpec
 from pytableau.exceptions import InvalidWorkbookError
 
 from ._xml import encode_shelf_field, encode_shelf_list
+from .advanced import AxisSpec, Pane, TableCalculation
+
+if TYPE_CHECKING:
+    from pytableau.core.datasource import Datasource
 
 
 @dataclass
@@ -94,6 +100,31 @@ class WorksheetBuilder:
         self._filters: list[_FilterSpec] = []
         self._sorts: list[_SortSpec] = []
         self._title: str | None = None
+        self._axes: AxisSpec | None = None
+        self._panes: tuple[Pane, ...] = ()
+        self._table_calcs: tuple[TableCalculation, ...] = ()
+        self._definitions: dict[str, dict[str, str]] = {}
+        self._format: FormatSpec | None = None
+
+    def _bind_fields(self, datasource: Datasource) -> None:
+        """Use actual datasource identities and metadata in native dependencies."""
+        from pytableau.core.fields import CalculatedField
+        from pytableau.core.references import FieldReference
+
+        for field in datasource.all_fields:
+            definition = {
+                "internal_name": field.name,
+                "caption": field.caption,
+                "datatype": field.datatype,
+                "role": field.role,
+                "type": field.xml_node.get(
+                    "type", "quantitative" if field.role == "measure" else "nominal"
+                ),
+            }
+            if isinstance(field, CalculatedField):
+                definition["formula"] = field.formula
+            for key in {field.caption, FieldReference.parse(field.name).name}:
+                self._definitions[key] = {**definition, **self._definitions.get(key, {})}
 
     # -- Datasource binding --------------------------------------------------
 
@@ -238,6 +269,39 @@ class WorksheetBuilder:
         self._title = text
         return self
 
+    def dual_axis(
+        self, primary: str, secondary: str, *, shelf: str = "rows", synchronized: bool = True
+    ) -> WorksheetBuilder:
+        """Add two native panes and folded, optionally synchronized axes."""
+        from .advanced import AxisSpec
+
+        self._axes = AxisSpec(primary, secondary, shelf, synchronized)
+        if shelf == "rows":
+            self._rows = [primary, secondary]
+        else:
+            self._cols = [primary, secondary]
+        return self
+
+    def panes(self, *panes: Pane) -> WorksheetBuilder:
+        """Set independent native mark panes (Pane value objects)."""
+        self._panes = panes
+        return self
+
+    def table_calculation(self, calculation: TableCalculation) -> WorksheetBuilder:
+        """Apply a TableCalculation to its matching shelf measure."""
+        self._table_calcs += (calculation,)
+        return self
+
+    def field_definition(self, name: str, **attributes: str) -> WorksheetBuilder:
+        """Supply native dependency column metadata when inference is insufficient."""
+        self._definitions[name] = attributes
+        return self
+
+    def format(self, spec: FormatSpec) -> WorksheetBuilder:
+        """Write a FormatSpec to native worksheet style rules."""
+        self._format = spec
+        return self
+
     # -- Build ---------------------------------------------------------------
 
     def build(self) -> etree._Element:
@@ -309,6 +373,19 @@ class WorksheetBuilder:
             title_el = etree.SubElement(ws, "title")
             title_el.text = self._title
 
+        if self._axes or self._panes or self._table_calcs:
+            from .advanced import native_worksheet
+
+            native_worksheet(
+                ws,
+                self._datasource_name or "",
+                axes=self._axes,
+                panes=self._panes,
+                calculations=self._table_calcs,
+                definitions=self._definitions,
+            )
+        if self._format:
+            self._format.apply(ws)
         return ws
 
     def raw(self) -> etree._Element:

@@ -17,6 +17,7 @@ Example::
 
 from __future__ import annotations
 
+from collections.abc import Iterable
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -27,6 +28,7 @@ from pytableau.constants import DataType, Role
 from pytableau.exceptions import DuplicateFieldError
 
 from ._xml import ds_internal_name, make_column_type, slugify, unique_calc_name
+from .advanced import LogicalTable, RelationBuilder, Relationship
 
 if TYPE_CHECKING:
     pass
@@ -62,6 +64,10 @@ class DatasourceBuilder:
         self._columns: list[_ColumnSpec] = []
         self._calc_fields: list[_CalcFieldSpec] = []
         self._seen_captions: set[str] = set()
+        self._relation: RelationBuilder | None = None
+        self._logical_tables: tuple[LogicalTable, ...] = ()
+        self._relationships: tuple[Relationship, ...] = ()
+        self._named_connections: dict[str, dict[str, str]] = {}
 
     # -- Connection ----------------------------------------------------------
 
@@ -132,6 +138,32 @@ class DatasourceBuilder:
         self._calc_fields.append(
             _CalcFieldSpec(caption=caption, formula=formula, datatype=dt, role=r)
         )
+        return self
+
+    def relation(self, relation: RelationBuilder) -> DatasourceBuilder:
+        """Set the physical relation tree (RelationBuilder)."""
+        self._relation = relation
+        return self
+
+    def named_connection(self, name: str, cls: str, **attributes: str) -> DatasourceBuilder:
+        """Register a physical connection used by relation aliases in a logical model."""
+        if not name or name in self._named_connections:
+            raise ValueError("Named connection IDs must be nonempty and unique")
+        self._named_connections[name] = {"class": cls, **attributes}
+        return self
+
+    def logical_model(
+        self, tables: Iterable[LogicalTable], relationships: Iterable[Relationship]
+    ) -> DatasourceBuilder:
+        """Build logical objects and relationship predicates with stable object IDs."""
+        self._logical_tables = tuple(tables)
+        self._relationships = tuple(relationships)
+        ids = [t.id for t in self._logical_tables]
+        if len(ids) != len(set(ids)):
+            raise ValueError("Logical table IDs must be unique")
+        for relationship in self._relationships:
+            if relationship.left not in ids or relationship.right not in ids:
+                raise ValueError("Relationship endpoint is not a logical table")
         return self
 
     # -- Classmethods --------------------------------------------------------
@@ -284,13 +316,50 @@ class DatasourceBuilder:
         Returns:
             An ``lxml.etree._Element`` ready to append to a workbook.
         """
+        if self._relation is not None and self._logical_tables:
+            raise ValueError(
+                "Set physical join trees on LogicalTable.relation when using a logical model"
+            )
         internal_name = self.name
 
         ds = etree.Element("datasource", name=internal_name, caption=self._caption)
 
         # Connection
         conn_attrs = {"class": self._connection_class, **self._connection_attrs}
-        etree.SubElement(ds, "connection", attrib=conn_attrs)
+        if self._logical_tables:
+            default = self.name + ".connection"
+            connections = {default: conn_attrs, **self._named_connections}
+            connection = etree.SubElement(ds, "connection", attrib={"class": "federated"})
+            named = etree.SubElement(connection, "named-connections")
+            for name, attributes in connections.items():
+                etree.SubElement(
+                    etree.SubElement(named, "named-connection", name=name, caption=name),
+                    "connection",
+                    attrib=attributes,
+                )
+            collection = etree.SubElement(connection, "relation", type="collection")
+            graph = etree.SubElement(ds, "object-graph")
+            objects = etree.SubElement(graph, "objects")
+            for logical in self._logical_tables:
+                obj = logical.build()
+                relation = obj.find("properties/relation")
+                assert relation is not None
+                for leaf in relation.iter("relation"):
+                    if leaf.get("type") in {"table", "text"}:
+                        reference = leaf.get("connection", default)
+                        if reference not in connections:
+                            raise ValueError(f"Unknown named connection: {reference}")
+                        leaf.set("connection", reference)
+                objects.append(obj)
+                import copy
+
+                collection.append(copy.deepcopy(relation))
+            relationships = etree.SubElement(graph, "relationships")
+            relationships.extend(r.build() for r in self._relationships)
+        else:
+            connection = etree.SubElement(ds, "connection", attrib=conn_attrs)
+            if self._relation:
+                connection.append(self._relation.build())
 
         # Columns container
         columns = etree.SubElement(ds, "columns")
@@ -325,6 +394,9 @@ class DatasourceBuilder:
                 col, "calculation", attrib={"class": "tableau", "formula": calc.formula}
             )
 
+        if self._relation or self._logical_tables:
+            ds.remove(columns)
+            ds.extend(list(columns))
         return ds
 
     def raw(self) -> etree._Element:

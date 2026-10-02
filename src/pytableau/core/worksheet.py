@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from lxml import etree
 
@@ -22,6 +22,7 @@ from .filters import (
     TopNFilter,
     parse_filter_node,
 )
+from .references import reference_tokens
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
@@ -39,7 +40,7 @@ def _normalise_ref(value: str | FieldReference) -> str:
 def _parse_ref_text(raw: str | None) -> list[FieldReference]:
     if not raw:
         return []
-    return [FieldReference.parse(match.group(0)) for match in _FIELD_PATTERN.finditer(raw)]
+    return [token.reference for token in reference_tokens(raw)]
 
 
 def _encode_refs(refs: list[FieldReference]) -> str:
@@ -80,6 +81,14 @@ class Worksheet(XMLNodeProxy):
         self.marks: MarkCard = self._read_mark_card()
         self.datasource_dependencies: list[str] = self._read_datasource_dependencies()
 
+    def _refresh_references(self) -> None:
+        """Refresh cached wrappers after an atomic scoped XML transformation."""
+        self._rows = self._read_shelf("rows")
+        self._cols = self._read_shelf("cols")
+        self.filters = self._read_filters()
+        self.marks = self._read_mark_card()
+        self.datasource_dependencies = self._read_datasource_dependencies()
+
     @property
     def mark_type(self) -> str | None:
         if not self._mark_type:
@@ -95,7 +104,7 @@ class Worksheet(XMLNodeProxy):
 
     @rows.setter
     def rows(self, value: list[FieldReference]) -> None:
-        self._rows = list(value)
+        self._rows = [FieldReference.parse(v) if isinstance(v, str) else v for v in value]
         self._write_shelf_text("rows", self._rows)
 
     @property
@@ -104,7 +113,7 @@ class Worksheet(XMLNodeProxy):
 
     @cols.setter
     def cols(self, value: list[FieldReference]) -> None:
-        self._cols = list(value)
+        self._cols = [FieldReference.parse(v) if isinstance(v, str) else v for v in value]
         self._write_shelf_text("cols", self._cols)
 
     def _parse_mark_type(self) -> str:
@@ -112,6 +121,8 @@ class Worksheet(XMLNodeProxy):
         if style is not None:
             return style.get("mark", style.get("class", ""))
         mark_node = self.xml_node.find("mark")
+        if mark_node is None:
+            mark_node = self.xml_node.find("table/panes/pane/mark")
         if mark_node is not None:
             return mark_node.get("class", "")
         return ""
@@ -146,10 +157,8 @@ class Worksheet(XMLNodeProxy):
         if targets is None:
             raise ValueError(f"Unsupported shelf '{shelf}'")
 
-        ref = FieldReference(field)
-        normalized = _normalise_field_name(ref.name)
-        ref = FieldReference(normalized)
-        if any(_normalise_field_name(f.name) == normalized for f in targets):
+        ref = FieldReference.parse(field)
+        if ref in targets:
             return
 
         if index is None or index >= len(targets):
@@ -168,18 +177,27 @@ class Worksheet(XMLNodeProxy):
 
         self._write_mark_text(shelf_key, targets)
 
+    @staticmethod
+    def _matching_shelf_refs(targets: list[FieldReference], field: str) -> list[FieldReference]:
+        reference = FieldReference.parse(field)
+        if reference.datasource or reference.instance:
+            return [ref for ref in targets if ref == reference]
+        matches = [ref for ref in targets if ref.name == reference.name]
+        if len({str(ref) for ref in matches}) > 1:
+            raise ValueError(f"Ambiguous shelf field '{field}'; supply its full reference")
+        return matches
+
     def remove_from_shelf(self, shelf: str, field: str) -> int:
         """Remove ``field`` from a shelf or mark channel."""
         shelf_key = _normalise_field_name(shelf)
         targets = self._get_shelf_lists(shelf_key)
         if targets is None:
             raise ValueError(f"Unsupported shelf '{shelf}'")
-        target_key = _normalise_field_name(field)
-        removed = [ref for ref in targets if _normalise_field_name(ref.name) == target_key]
+        removed = self._matching_shelf_refs(targets, field)
         if not removed:
             return 0
 
-        kept = [ref for ref in targets if _normalise_field_name(ref.name) != target_key]
+        kept = [ref for ref in targets if ref not in removed]
         if shelf_key in {"rows", "cols"}:
             if shelf_key == "rows":
                 self.rows = kept
@@ -197,9 +215,9 @@ class Worksheet(XMLNodeProxy):
         targets = self._get_shelf_lists(shelf_key)
         if targets is None:
             raise ValueError(f"Unsupported shelf '{shelf}'")
-        target_key = _normalise_field_name(field)
+        matches = self._matching_shelf_refs(targets, field)
         for i, ref in enumerate(targets):
-            if _normalise_field_name(ref.name) == target_key:
+            if ref in matches:
                 item = targets.pop(i)
                 break
         else:
@@ -222,6 +240,8 @@ class Worksheet(XMLNodeProxy):
     def _read_shelf(self, tag: str) -> list[FieldReference]:
         node = self.xml_node.find(tag)
         if node is None:
+            node = self.xml_node.find(f"table/{tag}")
+        if node is None:
             return []
 
         refs = _parse_ref_text(node.text)
@@ -234,6 +254,8 @@ class Worksheet(XMLNodeProxy):
 
     def _read_shelf_text(self, tag: str) -> str:
         node = self.xml_node.find(tag)
+        if node is None:
+            node = self.xml_node.find(f"table/{tag}")
         if node is None or node.text is None:
             return ""
         return node.text.strip()
@@ -241,13 +263,20 @@ class Worksheet(XMLNodeProxy):
     def _write_shelf_text(self, tag: str, refs: list[FieldReference]) -> None:
         node = self.xml_node.find(tag)
         if node is None:
-            node = etree.SubElement(self.xml_node, tag)
-        node.text = _encode_refs(refs)
+            node = self.xml_node.find(f"table/{tag}")
+        if node is None:
+            table = self.xml_node.find("table")
+            node = etree.SubElement(table if table is not None else self.xml_node, tag)
+        node.text = (
+            " / ".join(str(ref) for ref in refs)
+            if node.getparent().tag == "table"
+            else _encode_refs(refs)
+        )
 
     def _read_filters(self) -> list[Filter]:
         filters_node = self.xml_node.find("filters")
         if filters_node is None:
-            return []
+            return [parse_filter_node(n) for n in self.xml_node.findall("table/view/filter")]
         out: list[Filter] = []
         for node in filters_node.findall("filter"):
             out.append(parse_filter_node(node))
@@ -256,7 +285,12 @@ class Worksheet(XMLNodeProxy):
     def _read_mark_card(self) -> MarkCard:
         marks_node = self.xml_node.find("marks")
         if marks_node is None:
-            return MarkCard([], [], [], [], [])
+            channels: dict[str, list[FieldReference]] = {name: [] for name in self._MARK_CHANNELS}
+            for encoding in self.xml_node.findall("table/panes/pane/encodings/*"):
+                channel = "label" if encoding.tag == "text" else encoding.tag
+                if channel in channels and encoding.get("column"):
+                    channels[channel].append(FieldReference.parse(encoding.get("column", "")))
+            return MarkCard(**channels)
 
         channels: dict[str, list[FieldReference]] = {
             "color": [],
@@ -277,6 +311,18 @@ class Worksheet(XMLNodeProxy):
     def _write_mark_text(self, channel: str, refs: list[FieldReference]) -> None:
         marks_node = self.xml_node.find("marks")
         if marks_node is None:
+            encodings = self.xml_node.find("table/panes/pane/encodings")
+            if encodings is None:
+                if not refs:
+                    return
+                marks_node = etree.SubElement(self.xml_node, "marks")
+                etree.SubElement(marks_node, channel).text = _encode_refs(refs)
+                return
+            tag = "text" if channel == "label" else channel
+            for child in encodings.findall(tag):
+                encodings.remove(child)
+            for reference in refs:
+                etree.SubElement(encodings, tag, column=str(reference))
             return
         nodes = marks_node.findall(channel)
         if not nodes and not refs:
@@ -286,6 +332,100 @@ class Worksheet(XMLNodeProxy):
             nodes = marks_node.findall(channel)
         for node in nodes:
             node.text = _encode_refs(refs)
+
+    @property
+    def panes(self) -> list[Any]:
+        """Independent native mark panes and their qualified encodings."""
+        from pytableau.build.advanced import Pane
+
+        result = []
+        for node in self.xml_node.findall("table/panes/pane"):
+            mark = node.find("mark")
+            channels = {}
+            for encoding in node.findall("encodings/*"):
+                value = encoding.get("column")
+                if value:
+                    channel = "label" if encoding.tag == "text" else str(encoding.tag)
+                    channels.setdefault(channel, []).append(value)
+            result.append(
+                Pane(
+                    mark.get("class", "Automatic") if mark is not None else "Automatic",
+                    node.get("y-axis-name") or node.get("x-axis-name"),
+                    {k: tuple(v) for k, v in channels.items()},
+                )
+            )
+        return result
+
+    @property
+    def dual_axis(self) -> Any:
+        """Read folded axes as an AxisSpec, or None for an ordinary view."""
+        from pytableau.build.advanced import AxisSpec
+
+        for scope in ("rows", "cols"):
+            encodings = [
+                n
+                for n in self.xml_node.findall("table/style/style-rule[@element='axis']/encoding")
+                if n.get("fold") == "true" and n.get("scope") == scope
+            ]
+            if len(encodings) == 2:
+                return AxisSpec(
+                    encodings[0].get("field", ""),
+                    encodings[1].get("field", ""),
+                    scope,
+                    all(n.get("synchronized") == "true" for n in encodings),
+                )
+        return None
+
+    @property
+    def table_calculations(self) -> list[Any]:
+        """Read quick table calculations, ordered addressing and remaining dimensions."""
+        from dataclasses import replace
+
+        from pytableau.build.advanced import _QUICK_CALCS, TableCalculation
+
+        functions = {kind: function for function, (kind, _) in _QUICK_CALCS.items()}
+        result = []
+        for container in self.xml_node.findall(".//datasource-dependencies"):
+            source = container.get("datasource")
+            dimensions = {
+                n.get("name") for n in container.findall("column") if n.get("role") == "dimension"
+            }
+            visible = [
+                *self.rows,
+                *self.cols,
+                *(
+                    FieldReference.parse(v)
+                    for p in self.panes
+                    for v in p.encodings.get("detail", ())
+                ),
+            ]
+            for instance in container.findall("column-instance"):
+                node = instance.find("table-calc")
+                if node is None or node.get("type") not in functions:
+                    continue
+                ref = FieldReference.parse(instance.get("name", ""))
+                base = str(replace(ref, datasource=source, instance=None))
+                addressing = tuple(n.get("field", "") for n in node.findall("order"))
+                if not addressing and node.get("ordering-field"):
+                    addressing = (node.get("ordering-field", ""),)
+                addressed = {FieldReference.parse(v).name for v in addressing}
+                partitioning = tuple(
+                    dict.fromkeys(
+                        str(v)
+                        for v in visible
+                        if str(FieldReference(v.name)) in dimensions and v.name not in addressed
+                    )
+                )
+                result.append(
+                    TableCalculation(
+                        base,
+                        functions[node.get("type")],
+                        addressing,
+                        partitioning,
+                        node.get("ordering-type", "Rows"),
+                    )
+                )
+        return result
 
     def _read_datasource_dependencies(self) -> list[str]:
         names: list[str] = []

@@ -132,8 +132,8 @@ class XMLSchemaEngine:
         return issues
 
     def is_compatible(self, tree: etree._ElementTree, target_version: str) -> bool:
-        issues = self.validate_workbook(tree)
-        is_known_target = target_version in TABLEAU_VERSION_MAP
-        if not is_known_target:
-            return False
-        return all(issue.level != ValidationLevel.ERROR.value for issue in issues)
+        from pytableau.core.workbook import Workbook
+
+        workbook = Workbook()
+        workbook._load_tree(tree)
+        return workbook.compatibility(target_version).compatible

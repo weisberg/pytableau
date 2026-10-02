@@ -33,6 +33,7 @@ from .worksheet import Worksheet, WorksheetCollection
 
 if TYPE_CHECKING:
     from pytableau.agents.transactions import WorkbookTransaction
+    from pytableau.core.references import ReferenceGraph, ReferenceUse
     from pytableau.exceptions import ValidationIssue
     from pytableau.inspect.diff import Patch, WorkbookDiff
     from pytableau.package.promotion import PromotionChange, PromotionConfig
@@ -50,11 +51,10 @@ def _normalize_version(source_build: str | None) -> str:
         return source_build
     if source_build in _SOURCE_BUILD_TO_VERSION:
         return _SOURCE_BUILD_TO_VERSION[source_build]
-    match = re.match(r"^(\d{4})(\d)\.", source_build)
+    match = re.search(r"(\d{4})(?:\.)?(\d)(?:\.|\))", source_build)
     if match:
         version = f"{match[1]}.{match[2]}"
-        if version in TABLEAU_VERSION_MAP:
-            return version
+        return version
     return DEFAULT_TABLEAU_VERSION
 
 
@@ -130,6 +130,8 @@ class Workbook:
     """Top-level entry point for all pytableau operations."""
 
     def __init__(self) -> None:
+        self._asset_tombstones: dict[str, str] = {}
+        self._transaction_depth = 0
         self._path: Path | None = None
         self._package_manager: PackageManager | None = None
         self._tree: etree._ElementTree
@@ -299,6 +301,12 @@ class Workbook:
         from lxml import etree as _etree
 
         if hasattr(worksheet, "build"):
+            if hasattr(worksheet, "_bind_fields"):
+                datasource = next(
+                    (ds for ds in self.datasources if ds.name == worksheet._datasource_name), None
+                )
+                if datasource is not None:
+                    worksheet._bind_fields(datasource)
             node: _etree._Element = worksheet.build()
         else:
             node = worksheet
@@ -424,9 +432,9 @@ class Workbook:
     def transaction(self) -> WorkbookTransaction:
         """Return an atomic transaction context manager for this workbook.
 
-        On entry the XML tree is deep-copied.  If an exception propagates
-        through the ``with`` block the tree is restored, leaving the workbook
-        completely unchanged::
+        XML and owned assets are isolated on entry. Exceptions restore the
+        snapshot; successful changes remain staged until ``save()``. Saving
+        inside the context is rejected. Reacquire object wrappers after rollback::
 
             with wb.transaction() as tx:
                 tx.rename_field("Sales", "Rev", "Revenue")
@@ -490,13 +498,22 @@ class Workbook:
             self._template_engine = TemplateEngine(self._tree)
         return self._template_engine
 
-    def migrate_version(self, version: str) -> None:
+    def migrate_version(self, version: str, *, allow_unverified: bool = False) -> None:
         """Update workbook metadata for a different Tableau version."""
         source_build = TABLEAU_VERSION_MAP.get(version)
         if source_build is None:
             raise ValueError(f"Unsupported Tableau version: {version}")
+        from pytableau.xml.semantic import require_compatibility
+
+        require_compatibility(self.compatibility(version), allow_unverified=allow_unverified)
         self._version = version
         self.xml_root.set("source-build", source_build)
+
+    def compatibility(self, target_version: str, **kwargs: Any) -> Any:
+        """Report supported, unsupported, or unverified target capabilities."""
+        from pytableau.xml.semantic import compatibility
+
+        return compatibility(self, target_version, **kwargs)
 
     def merge(self, other: Workbook, *, conflict_suffix: str = " (imported)") -> None:
         """Merge datasource, worksheet, and dashboard nodes from another workbook."""
@@ -539,6 +556,16 @@ class Workbook:
     def lineage(self) -> FieldLineage:
         """Build a calculated-field dependency graph."""
         return FieldLineage(self)
+
+    def references(self) -> ReferenceGraph:
+        """Return a datasource-qualified reference graph for validation and impact."""
+        from pytableau.core.references import ReferenceGraph
+
+        return ReferenceGraph(self)
+
+    def impact(self, field: str, datasource: str | None = None) -> list[ReferenceUse]:
+        """Preview direct and transitive references affected by a field change."""
+        return self.references().impact(field, datasource)
 
     def report(self) -> WorkbookReport:
         """Generate documentation content for the workbook."""
@@ -650,6 +677,7 @@ class Workbook:
 
     def _load_tree(self, tree: etree._ElementTree) -> None:
         self._tree = tree
+        self._template_engine = None
         root = tree.getroot()
         source_build = root.get("source-build")
         self._version = _normalize_version(source_build)
@@ -702,6 +730,10 @@ class Workbook:
         after successful serialization. Assets for plain TWB output are installed
         individually. Subsequent :meth:`save` calls use this path.
         """
+        if self._transaction_depth:
+            raise RuntimeError(
+                "Save after committing the workbook transaction; use a migration journal for file recovery"
+            )
         destination = Path(path).expanduser()
         if destination.suffix.lower() not in {".twb", ".twbx"}:
             raise InvalidWorkbookError("Workbook path must end with .twb or .twbx")
@@ -716,6 +748,19 @@ class Workbook:
                 raise SchemaValidationError(f"Workbook is invalid: {issue}")
 
         destination.parent.mkdir(parents=True, exist_ok=True)
+        tombstones = []
+        if destination.suffix.lower() == ".twb":
+            import hashlib
+
+            from pytableau.core.state import safe_member
+
+            for name, digest in self._asset_tombstones.items():
+                removed = destination.parent / safe_member(name)
+                if not removed.resolve().is_relative_to(destination.parent.resolve()):
+                    raise InvalidWorkbookError("Asset removal escapes destination directory")
+                if removed.is_file() and hashlib.sha256(removed.read_bytes()).hexdigest() != digest:
+                    raise InvalidWorkbookError(f"Deleted asset changed since patch: {name}")
+                tombstones.append(removed)
         if (
             destination.suffix.lower() == ".twb"
             and self._package_manager is not None
@@ -742,6 +787,10 @@ class Workbook:
             manager = self._package_manager or PackageManager(work_twb)
             active_twb_name = manager.twb_member_name
             manager.save_as(staged, source_twb=work_twb)
+            import os
+            import shutil
+
+            installs = []
             for asset in sorted(output_dir.rglob("*")):
                 if asset.is_file() and asset != staged:
                     target = destination.parent / asset.relative_to(output_dir)
@@ -749,10 +798,42 @@ class Workbook:
                         raise InvalidPathError(
                             f"Asset output escapes destination directory: {target}"
                         )
+                    installs.append((asset, target))
+            installs.append((staged, destination))
+            # Back up every affected file before the first replacement. Roll back
+            # ordinary I/O failures across XML, sidecars and asset deletions.
+            backups = {}
+            backup_dir = Path(temp_dir) / "backups"
+            backup_dir.mkdir()
+            for index, target in enumerate([t for _, t in installs] + tombstones):
+                if target.exists() and not target.is_file():
+                    raise InvalidPathError(f"Output target is not a file: {target}")
+                backup = backup_dir / str(index) if target.exists() else None
+                if backup is not None:
+                    shutil.copy2(target, backup)
+                backups[target] = backup
+            changed = []
+            try:
+                for asset, target in installs:
                     target.parent.mkdir(parents=True, exist_ok=True)
                     asset.replace(target)
-            staged.replace(destination)
+                    changed.append(target)
+                for removed in tombstones:
+                    removed.unlink(missing_ok=True)
+                    changed.append(removed)
+            except BaseException as error:
+                for target in reversed(changed):
+                    backup = backups[target]
+                    try:
+                        if backup is None:
+                            target.unlink(missing_ok=True)
+                        else:
+                            os.replace(backup, target)
+                    except OSError as rollback_error:
+                        error.add_note(f"Failed to restore {target}: {rollback_error}")
+                raise
 
+        self._asset_tombstones.clear()
         self._path = destination
         previous_manager = self._package_manager
         self._package_manager = PackageManager(destination, twb_hint=active_twb_name)
@@ -795,20 +876,26 @@ class Workbook:
     def to_xml_string(self) -> str:
         """Serialize workbook XML as a UTF-8 string."""
         xml = etree.tostring(
-            self._tree.getroot(),
+            self._tree,
             encoding="utf-8",
             xml_declaration=True,
             pretty_print=True,
         )
         return xml.decode("utf-8")
 
-    def validate(self, profile: ValidationProfile | None = None) -> list[ValidationIssue]:
+    def validate(
+        self, profile: ValidationProfile | None = None, *, semantic: bool = True
+    ) -> list[ValidationIssue]:
         """Validate the workbook XML against known schema rules.
 
         Args:
             profile: Optional :class:`ValidationProfile` to run additional rules.
         """
         issues = self._validate_for_save()
+        if semantic:
+            from pytableau.xml.semantic import validate_semantics
+
+            issues.extend(validate_semantics(self))
         if profile is not None:
             issues.extend(profile.check(self))
         return issues

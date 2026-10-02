@@ -3,7 +3,7 @@
 These tests exercise pytableau against a real, complex Tableau workbook:
   - Premier League statistics dashboard
   - 1 federated datasource (excel-direct + hyper extract)
-  - 78 fields, 65 calculated fields
+  - 83 fields, 65 calculated fields
   - 18 worksheets, 1 dashboard
   - 3 parameters
   - 65 lineage entries
@@ -66,7 +66,7 @@ def lineage(wb):
 
 class TestWorkbookMetadata:
     def test_version(self, wb):
-        assert wb.version == "2024.1"
+        assert wb.version == "2025.3"
 
     def test_source_platform(self, wb):
         assert wb.source_platform == "mac"
@@ -113,7 +113,7 @@ class TestDatasource:
         assert "Premier" in ds.caption or "Season" in ds.caption or "Master" in ds.caption
 
     def test_total_field_count(self, ds):
-        assert len(list(ds.all_fields)) == 78
+        assert len(list(ds.all_fields)) == 83
 
     def test_calculated_field_count(self, ds):
         assert len(list(ds.calculated_fields)) == 65
@@ -252,15 +252,15 @@ class TestCatalog:
         assert set(data.keys()) >= {"version", "datasource_count", "datasources", "parameters"}
 
     def test_catalog_version(self, cat):
-        assert cat.to_dict()["version"] == "2024.1"
+        assert cat.to_dict()["version"] == "2025.3"
 
     def test_catalog_datasource_count(self, cat):
         assert cat.to_dict()["datasource_count"] == 1
 
     def test_catalog_datasource_has_fields(self, cat):
         ds_data = cat.to_dict()["datasources"][0]
-        assert ds_data["field_count"] == 78
-        assert len(ds_data["fields"]) == 78
+        assert ds_data["field_count"] == 83
+        assert len(ds_data["fields"]) == 83
 
     def test_catalog_datasource_has_calcs(self, cat):
         ds_data = cat.to_dict()["datasources"][0]
@@ -364,7 +364,7 @@ class TestReport:
         from pytableau.inspect.report import WorkbookReport
 
         md = WorkbookReport(wb).to_markdown()
-        assert "2024.1" in md
+        assert "2025.3" in md
 
     def test_report_contains_datasource_caption(self, wb):
         from pytableau.inspect.report import WorkbookReport
@@ -546,11 +546,12 @@ class TestVersionMigrate:
             "version_migrate",
             workbook=src,
             target_version="2023.1",
+            allow_unverified=True,
             output=out,
         )
         assert result.ok, f"version_migrate failed: {result.error}"
         assert result.result["target_version"] == "2023.1"
-        assert result.result["original_version"] == "2024.1"
+        assert result.result["original_version"] == "2025.3"
 
         wb2 = Workbook.open(out)
         assert wb2.version == "2023.1"
@@ -573,7 +574,7 @@ class TestCLIInspect:
         from pytableau.cli.main import app
 
         data = app.call("inspect", workbook=SAMPLE).result
-        assert data["version"] == "2024.1"
+        assert data["version"] == "2025.3"
 
     def test_inspect_counts(self):
         from pytableau.cli.main import app
@@ -607,7 +608,7 @@ class TestCLIInspect:
         items = result.result
         assert isinstance(items, list)
         assert len(items) == 1
-        assert items[0]["field_count"] == 78
+        assert items[0]["field_count"] == 83
 
     def test_lineage_returns_dict(self):
         from pytableau.cli.main import app
@@ -634,4 +635,4 @@ class TestCLIInspect:
         assert result.ok
         md = result.result["markdown"]
         assert "# Workbook Report" in md
-        assert "2024.1" in md
+        assert "2025.3" in md

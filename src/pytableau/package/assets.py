@@ -6,7 +6,11 @@ import shutil
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
+
+from lxml import etree
+
+from pytableau.exceptions import InvalidPathError
 
 IMAGE_EXTS: frozenset[str] = frozenset({".png", ".jpg", ".jpeg", ".gif", ".svg", ".bmp"})
 
@@ -108,3 +112,45 @@ def add_asset(
     except Exception:
         tmp_path.unlink(missing_ok=True)
         raise
+
+
+def owned_assets(
+    root: Path, tree: etree._ElementTree, *, reject_external: bool = False
+) -> dict[str, Path]:
+    paths = set((root / "Data").rglob("*")) if (root / "Data").exists() else set()
+    for node in tree.getroot().iter():
+        for attribute in ("filename", "path"):
+            value = node.get(attribute)
+            if not value:
+                continue
+            member = PurePosixPath(value)
+            candidate = root / value
+            portable = (
+                not member.is_absolute()
+                and ".." not in member.parts
+                and "\\" not in value
+                and ":" not in value
+            )
+            if not portable or not candidate.resolve().is_relative_to(root.resolve()):
+                if reject_external and candidate.is_file():
+                    raise InvalidPathError(
+                        f"Packaged output requires an owned relative asset reference: {value}"
+                    )
+                continue
+            if candidate.is_file():
+                paths.add(candidate)
+    result = {}
+    for path in paths:
+        if not path.is_file():
+            continue
+        if not path.resolve().is_relative_to(root.resolve()):
+            raise InvalidPathError(f"Asset symlink escapes workbook directory: {path}")
+        result[path.relative_to(root).as_posix()] = path
+    return result
+
+
+def plain_asset_name(member: str, asset: str) -> str:
+    """Map a ZIP member to the layout of a standalone active workbook."""
+    path = PurePosixPath(asset)
+    parent = PurePosixPath(member).parent
+    return (path.relative_to(parent) if path.is_relative_to(parent) else path).as_posix()

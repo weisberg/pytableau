@@ -5,16 +5,12 @@ from __future__ import annotations
 import re
 from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
 
 from lxml import etree
 
 from pytableau.constants import FilterType
+from pytableau.core.references import FieldReference
 from pytableau.xml.proxy import XMLNodeProxy
-
-if TYPE_CHECKING:
-    from pytableau.core.fields import FieldReference
-
 
 _FIELD_RE = re.compile(r"\[(?P<name>[^\]]+)\]")
 
@@ -29,11 +25,7 @@ def _normalise_field_name(value: str | None) -> str:
 
 
 def _format_field_name(value: str | FieldReference) -> str:
-    text = value if isinstance(value, str) else value.name
-    text = text.strip()
-    if text.startswith("[") and text.endswith("]"):
-        return text
-    return f"[{text}]"
+    return str(FieldReference.parse(value)) if isinstance(value, str) else str(value)
 
 
 def _extract_values(node: etree._Element) -> list[str]:
@@ -101,7 +93,12 @@ class Filter(XMLNodeProxy):
     @property
     def field(self) -> str:
         raw = self.xml_node.get("field") or self.xml_node.get("column") or ""
-        return _normalise_field_name(raw)
+        return FieldReference.parse(raw).name if raw else ""
+
+    @property
+    def reference(self) -> FieldReference:
+        """The full datasource-qualified field identity, including instance encoding."""
+        return FieldReference.parse(self.xml_node.get("field") or self.xml_node.get("column") or "")
 
     @field.setter
     def field(self, value: str) -> None:

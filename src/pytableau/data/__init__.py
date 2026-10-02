@@ -13,6 +13,10 @@ from pytableau.data.types import (
 )
 
 __all__ = [
+    "ColumnContract",
+    "ExtractContract",
+    "ExtractContractError",
+    "TableIdentity",
     "HyperBridge",
     "ExtractManager",
     "all_mappings",
@@ -21,3 +25,5 @@ __all__ = [
     "pandas_to_hyper_remote_type",
     "pandas_to_tableau_xml",
 ]
+
+from .contracts import ColumnContract, ExtractContract, ExtractContractError, TableIdentity

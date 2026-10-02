@@ -231,6 +231,7 @@ def test_version_migrate(tmp_path: Path) -> None:
         "version_migrate",
         workbook=twb,
         target_version="2023.1",
+        allow_unverified=True,
         output=out,
     )
 
