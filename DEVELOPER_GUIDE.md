@@ -158,7 +158,12 @@ wb.save_as("output.twbx")           # Save to new path
 wb.save_as("output.twbx", scrub_credentials=True)  # Strip passwords (default: True)
 ```
 
-`save_as()` always runs the validation gate before writing. If errors are present, it raises `InvalidWorkbookError` unless you pass `validate=False`.
+`save_as()` validates before writing and raises `SchemaValidationError` on schema errors.
+It stages output beside the destination and replaces the destination only after a
+successful write. Saving to another path preserves the original workbook; subsequent
+`save()` calls target the last successful destination. Packaging a standalone TWB
+includes files in its adjacent `Data/` directory. See the
+[maintenance and workbook I/O notes](docs/maintenance.md) for guarantees and limitations.
 
 ### Workbook Properties
 

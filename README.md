@@ -85,6 +85,7 @@ ds = (
     .connection("hyper", dbname="Data/sales.hyper")
     .column("Region", DataType.STRING, Role.DIMENSION)
     .column("Revenue", DataType.REAL, Role.MEASURE)
+    .column("Cost", DataType.REAL, Role.MEASURE)
     .calculated_field("Margin %", "SUM([Revenue]) / SUM([Cost]) - 1")
     .build()
 )
@@ -179,8 +180,8 @@ from pytableau import Workbook
 wb = Workbook.open("report.twbx")
 
 with wb.transaction() as txn:
-    txn.rename_field("Old Name", "New Name", datasource="Sales Data")
-    txn.swap_connection("dev-db.corp.com", "prod-db.corp.com")
+    txn.rename_field("Sales Data", "Old Name", "New Name")
+    txn.swap_connection("Sales Data", server="prod-db.corp.com")
     # raises → XML is rolled back automatically
 ```
 
@@ -193,8 +194,8 @@ from pytableau import Workbook
 wb = Workbook.open("template.twbx")
 df = pd.read_csv("fresh_data.csv")
 ds = wb.datasources["Sales Data"]
-ds.hyper.create(ds, df)          # create extract
-# or ds.hyper.refresh(ds, df)    # replace existing extract
+ds.create_extract(df)           # create extract
+# or ds.refresh_extract(df)     # replace existing extract
 # or ds.upsert_extract(df, key_columns=["id"])  # incremental upsert
 wb.save_as("refreshed_report.twbx")
 ```
@@ -250,6 +251,7 @@ from pytableau.fleet import FleetScanner, MigrationPlan, MigrationEngine, Compli
 
 # Scan a directory of workbooks
 scanner = FleetScanner("/workbooks/")
+scanner.scan()
 report = scanner.report()
 report.to_html("fleet_health.html")
 
@@ -258,15 +260,19 @@ plan = (
     MigrationPlan()
     .source_directory("/workbooks/")
     .output_directory("/migrated/")
-    .swap_connections("dev-db.corp.com", "prod-db.corp.com")
+    .swap_connections({"dev-db.corp.com": "prod-db.corp.com"})
+    .validate_all()
 )
 result = MigrationEngine(plan).execute(dry_run=True)
-print(result.summary())
+print(result)
 
 # Compliance check against a governance ruleset
-runner = ComplianceRunner("/workbooks/", "rules.yml")
-runner.run()
-runner.to_junit_xml("compliance.xml")   # for CI/CD
+from pathlib import Path
+from pytableau.governance import GovernanceRuleset
+
+runner = ComplianceRunner(GovernanceRuleset.from_yaml("rules.yml"))
+results = runner.run("/workbooks/")
+Path("compliance.xml").write_text(runner.to_junit_xml(results), encoding="utf-8")
 ```
 
 ### pytest plugin
@@ -332,7 +338,7 @@ pytableau search-index revenue --db catalog.db
 # Fleet operations
 pytableau fleet-scan ./workbooks/
 pytableau comply ./workbooks/ --ruleset rules.yml
-pytableau migrate ./workbooks/ --output ./migrated/ --swap dev-db:prod-db
+pytableau migrate ./workbooks/ ./migrated/ --swap-server dev-db=prod-db
 pytableau contract-test workbook.twb --contract contracts.yml
 
 # Packaging

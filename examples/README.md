@@ -1,6 +1,6 @@
 # pytableau Examples
 
-Ten self-contained example scripts that demonstrate real-world usage patterns.
+Eleven self-contained example scripts that demonstrate real-world usage patterns.
 Each script is runnable from the repository root and includes inline documentation.
 
 | # | Script | What it demonstrates |
@@ -15,13 +15,14 @@ Each script is runnable from the repository root and includes inline documentati
 | 08 | `08_deprecated_function_scanner.py` | Scan a workbook (or directory) for deprecated `SCRIPT_*` / `RAWSQL_*` functions |
 | 09 | `09_patch_roundtrip.py` | Full Patch lifecycle: diff → serialize → store → restore → apply |
 | 10 | `10_formula_complexity_scorer.py` | Score and rank every calculated field by formula complexity (LOD depth, IF nesting, node count) |
+| 11 | `11_fleet_migration.py` | Preview or apply a validated migration while preserving source workbooks and relative paths |
 
 ---
 
 ## Requirements
 
 ```bash
-# Core examples (01–02, 04–06, 09)
+# Core examples (01–02, 04–06, 09, 11)
 pip install pytableau
 
 # Formula parser examples (03, 07, 08, 10)
@@ -75,6 +76,9 @@ python examples/09_patch_roundtrip.py \
 
 # Formula complexity scorer (requires pytableau[analysis])
 python examples/10_formula_complexity_scorer.py tests/fixtures/lod_heavy_v2024_1.twb
+
+# Fleet migration preview (writes no files; add --apply after reviewing results)
+python examples/11_fleet_migration.py tests/fixtures /tmp/migrated --version 2024.1
 ```
 
 ---

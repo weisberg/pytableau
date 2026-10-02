@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Callable
+import shutil
+from collections.abc import Callable, Iterator
+from contextlib import contextmanager
 from pathlib import Path
+from tempfile import TemporaryDirectory
 from typing import Any
+from uuid import uuid4
 
 from pytableau._compat import _MissingDependency, import_optional
 from pytableau.exceptions import HyperError
@@ -47,14 +51,22 @@ class HyperBridge:
         if not isinstance(df, pandas_module.DataFrame):
             raise TypeError("from_dataframe() expects a pandas DataFrame.")
 
-        if mode == "replace" and self.path.exists():
-            self.path.unlink()
-
         pantab = self._require(_pantab, "pantab")
         writer = self._as_callable(pantab, "frame_to_hyper")
         if self.path.parent:
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        writer(df, str(self.path), table=table, mode=mode)
+        if mode == "replace" and self.path.exists():
+            # pantab's write mode replaces the entire database. Replace just the
+            # requested table in a copy, then install it after a successful write.
+            hyperapi = self._require(_hyperapi, "tableauhyperapi")
+            with TemporaryDirectory(prefix="pytableau-write-", dir=self.path.parent) as temp_dir:
+                staged = Path(temp_dir) / "staged.hyper"
+                shutil.copy2(self.path, staged)
+                HyperBridge(staged).execute(f"DROP TABLE IF EXISTS {hyperapi.TableName(table)}")
+                writer(df, str(staged), table=table, table_mode="a")
+                staged.replace(self.path)
+        else:
+            writer(df, str(self.path), table=table, table_mode="w" if mode == "replace" else "a")
 
         if self._on_write is not None:
             self._on_write(df, table)
@@ -62,7 +74,7 @@ class HyperBridge:
     def to_dataframe(self, table: str = "Extract"):
         self._require(_pandas, "pandas")
         pantab = self._require(_pantab, "pantab")
-        reader = self._as_callable(pantab, "hyper_to_frame")
+        reader = self._as_callable(pantab, "frame_from_hyper")
         output = reader(str(self.path), table=table)
         if isinstance(output, list):
             pandas_module = self._require(_pandas, "pandas")
@@ -72,65 +84,31 @@ class HyperBridge:
     def append_dataframe(self, df: Any, table: str = "Extract") -> None:
         self.from_dataframe(df, table=table, mode="append")
 
-    def execute(self, sql: str) -> None:
-        hyperapi = self._require(_hyperapi, "tableauhyperapi")
-        self._run_command(sql, hyperapi=hyperapi)
+    def execute(self, sql: str) -> int | None:
+        with self._connection() as connection:
+            return connection.execute_command(sql)
 
     def query(self, sql: str):
         self._require(_pandas, "pandas")
+        with self._connection() as connection, connection.execute_query(sql) as result:
+            rows = list(result)
+            columns = [column.name.unescaped for column in result.schema.columns]
+        return self._rows_to_dataframe(rows, columns)
+
+    @contextmanager
+    def _connection(self) -> Iterator[Any]:
         hyperapi = self._require(_hyperapi, "tableauhyperapi")
-        return self._run_query(sql, hyperapi=hyperapi)
-
-    def _run_command(self, sql: str, *, hyperapi: Any) -> None:
-        endpoint = getattr(hyperapi, "HyperProcess", None)
-        connection_ctor = getattr(hyperapi, "Connection", None)
-        if endpoint is None or connection_ctor is None:
-            raise HyperError(
-                "Unsupported tableauhyperapi API: expected HyperProcess and Connection."
-            )
-
         with (
-            endpoint() as process,
-            connection_ctor(
+            hyperapi.HyperProcess(
+                telemetry=hyperapi.Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU
+            ) as process,
+            hyperapi.Connection(
                 endpoint=process.endpoint,
                 database=str(self.path),
-                create_if_missing=False,
+                create_mode=hyperapi.CreateMode.NONE,
             ) as connection,
         ):
-            if not hasattr(connection, "execute_command"):
-                raise HyperError("Unsupported tableauhyperapi Connection API.")
-            connection.execute_command(sql)
-
-    def _run_query(self, sql: str, *, hyperapi: Any):
-        endpoint = getattr(hyperapi, "HyperProcess", None)
-        connection_ctor = getattr(hyperapi, "Connection", None)
-        if endpoint is None or connection_ctor is None:
-            raise HyperError(
-                "Unsupported tableauhyperapi API: expected HyperProcess and Connection."
-            )
-
-        with (
-            endpoint() as process,
-            connection_ctor(
-                endpoint=process.endpoint,
-                database=str(self.path),
-                create_if_missing=False,
-            ) as connection,
-        ):
-            if hasattr(connection, "execute_query"):
-                result = connection.execute_query(sql)
-                rows = list(result.fetchall()) if hasattr(result, "fetchall") else list(result)
-                descriptions = getattr(result, "description", None)
-                columns = []
-                if descriptions:
-                    for column in descriptions:
-                        columns.append(str(getattr(column, "name", "")) or "")
-            elif hasattr(connection, "execute_list_query"):
-                rows = connection.execute_list_query(sql)
-                columns = [f"column_{idx}" for idx in range(len(rows[0]))] if rows else []
-            else:
-                raise HyperError("Unsupported tableauhyperapi Connection API.")
-            return self._rows_to_dataframe(rows, columns)
+            yield connection
 
     def _rows_to_dataframe(self, rows: list[tuple[Any, ...]], columns: list[str]):
         pandas_module = self._require(_pandas, "pandas")
@@ -139,27 +117,25 @@ class HyperBridge:
         return pandas_module.DataFrame.from_records(rows, columns=columns if columns else None)
 
     def tables(self) -> list[str]:
-        try:
-            rows = self.query("SELECT table_name FROM information_schema.tables")
-        except Exception as exc:
-            raise HyperError(f"Unable to enumerate tables from '{self.path}'.") from exc
-        return [str(row[0]) for row in rows.itertuples(index=False, name=None)]
+        with self._connection() as connection:
+            return [
+                table.name.unescaped
+                for schema in connection.catalog.get_schema_names()
+                for table in connection.catalog.get_table_names(schema)
+            ]
 
     def schema(self, table: str) -> list[dict[str, str]]:
-        rows = self.query(
-            "SELECT column_name, data_type FROM information_schema.columns "
-            f"WHERE table_name = '{table}'"
-        )
-        return [
-            {
-                "name": str(row[0]),
-                "type": str(row[1]),
-            }
-            for row in rows.itertuples(index=False, name=None)
-        ]
+        hyperapi = self._require(_hyperapi, "tableauhyperapi")
+        with self._connection() as connection:
+            definition = connection.catalog.get_table_definition(hyperapi.TableName(table))
+            return [
+                {"name": column.name.unescaped, "type": str(column.type)}
+                for column in definition.columns
+            ]
 
     def row_count(self, table: str) -> int:
-        rows = self.query(f"SELECT COUNT(*) AS __count FROM [{table}]")
+        hyperapi = self._require(_hyperapi, "tableauhyperapi")
+        rows = self.query(f"SELECT COUNT(*) AS __count FROM {hyperapi.TableName(table)}")
         if len(rows) == 0:
             return 0
         return int(rows.iloc[0, 0])
@@ -224,11 +200,24 @@ class HyperFile:
         then ``mode="append"`` for subsequent batches.
         """
         total = 0
-        for i in range(0, len(df), batch_size):
-            chunk = df.iloc[i : i + batch_size]
-            mode = "replace" if i == 0 else "append"
-            self._b.from_dataframe(chunk, table=table, mode=mode)
-            total += len(chunk)
+        if batch_size <= 0:
+            raise ValueError("batch_size must be positive.")
+        if len(df) == 0:
+            self._b.from_dataframe(df, table=table, mode="replace")
+            return 0
+        _ = self._b  # Enforce context-manager use before creating any output.
+        self._path.parent.mkdir(parents=True, exist_ok=True)
+        with TemporaryDirectory(prefix="pytableau-bulk-", dir=self._path.parent) as temp_dir:
+            staged_path = Path(temp_dir) / "staged.hyper"
+            if self._path.exists():
+                shutil.copy2(self._path, staged_path)
+            bridge = HyperBridge(staged_path)
+            for i in range(0, len(df), batch_size):
+                chunk = df.iloc[i : i + batch_size]
+                mode = "replace" if i == 0 else "append"
+                bridge.from_dataframe(chunk, table=table, mode=mode)
+                total += len(chunk)
+            staged_path.replace(self._path)
         return total
 
     def rolling_window_refresh(
@@ -245,19 +234,34 @@ class HyperFile:
         Returns:
             Number of rows written.
         """
-        import contextlib
         import datetime
 
+        if window_days < 0:
+            raise ValueError("window_days must not be negative.")
+        if date_col not in df.columns:
+            raise ValueError(f"Date column not found: {date_col!r}")
+        hyperapi = self._b._require(_hyperapi, "tableauhyperapi")
         cutoff = datetime.date.today() - datetime.timedelta(days=window_days)
-        with contextlib.suppress(Exception):
-            self._b.execute(
-                f'DELETE FROM "Extract"."{table}" WHERE "{date_col}" < DATE \'{cutoff}\''
-            )
-        self._b.from_dataframe(df, table=table, mode="append")
+        if self._path.exists():
+            with TemporaryDirectory(prefix="pytableau-rolling-", dir=self._path.parent) as temp_dir:
+                staged_path = Path(temp_dir) / "staged.hyper"
+                shutil.copy2(self._path, staged_path)
+                bridge = HyperBridge(staged_path)
+                bridge.execute(
+                    f"DELETE FROM {hyperapi.TableName(table)} "
+                    f"WHERE {hyperapi.Name(date_col)} < DATE '{cutoff}'"
+                )
+                bridge.append_dataframe(df, table=table)
+                staged_path.replace(self._path)
+        else:
+            self._b.append_dataframe(df, table=table)
         return len(df)
 
     def upsert(self, df: Any, key_cols: list[str], table: str = "Extract") -> tuple[int, int]:
-        """Upsert rows: delete existing rows matching key columns, then insert.
+        """Atomically replace rows matching all key columns, then insert.
+
+        Composite keys and null keys are supported. Work is staged in a copy
+        of the extract; failures leave the original file untouched.
 
         Args:
             df: DataFrame with new/updated rows.
@@ -269,25 +273,51 @@ class HyperFile:
         """
         if not key_cols:
             raise ValueError("key_cols must not be empty for upsert.")
+        pandas_module = self._b._require(_pandas, "pandas")
+        hyperapi = self._b._require(_hyperapi, "tableauhyperapi")
+        if not isinstance(df, pandas_module.DataFrame):
+            raise TypeError("upsert() expects a pandas DataFrame.")
+        missing = [col for col in key_cols if col not in df.columns]
+        if missing:
+            raise ValueError(f"Key columns not found: {missing}")
+        if df.empty:
+            return 0, 0
+        if not self._path.exists():
+            self._b.from_dataframe(df, table=table)
+            return 0, len(df)
+        with self._b._connection() as connection:
+            has_table = connection.catalog.has_table(hyperapi.TableName(table))
+        if not has_table:
+            self._b.append_dataframe(df, table=table)
+            return 0, len(df)
 
-        # Build DELETE ... WHERE key IN (values from df)
-        deleted = 0
-        if self._path.exists():
-            try:
-                existing_count_before = self.row_count(table)
-                # Build IN clause per key column (simple equality for single key)
-                if len(key_cols) == 1:
-                    col = key_cols[0]
-                    values = ", ".join(f"'{v}'" for v in df[col].astype(str).unique())
-                    if values:
-                        self._b.execute(
-                            f'DELETE FROM "Extract"."{table}" WHERE "{col}" IN ({values})'
-                        )
-                        existing_count_after = self.row_count(table)
-                        deleted = existing_count_before - existing_count_after
-            except Exception:
-                deleted = 0
-
-        self._b.from_dataframe(df, table=table, mode="append")
-        inserted = len(df)
-        return deleted, inserted
+        with TemporaryDirectory(prefix="pytableau-upsert-", dir=self._path.parent) as temp_dir:
+            staged_path = Path(temp_dir) / "staged.hyper"
+            shutil.copy2(self._path, staged_path)
+            stage_name = f"__pytableau_upsert_{uuid4().hex}"
+            HyperBridge(staged_path).from_dataframe(df, table=stage_name)
+            target = hyperapi.TableName(table)
+            stage = hyperapi.TableName(stage_name)
+            predicates = " AND ".join(
+                f"target.{hyperapi.Name(col)} IS NOT DISTINCT FROM incoming.{hyperapi.Name(col)}"
+                for col in key_cols
+            )
+            columns = ", ".join(str(hyperapi.Name(str(col))) for col in df.columns)
+            with (
+                hyperapi.HyperProcess(
+                    telemetry=hyperapi.Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU
+                ) as process,
+                hyperapi.Connection(endpoint=process.endpoint, database=str(staged_path)) as conn,
+            ):
+                conn.execute_command("BEGIN")
+                deleted = conn.execute_command(
+                    f"DELETE FROM {target} AS target WHERE EXISTS "
+                    f"(SELECT 1 FROM {stage} AS incoming WHERE {predicates})"
+                )
+                conn.execute_command(
+                    f"INSERT INTO {target} ({columns}) SELECT {columns} FROM {stage}"
+                )
+                conn.execute_command("COMMIT")
+                conn.execute_command(f"DROP TABLE {stage}")
+            staged_path.replace(self._path)
+        return deleted or 0, len(df)

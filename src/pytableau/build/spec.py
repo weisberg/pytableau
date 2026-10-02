@@ -50,7 +50,11 @@ def _load_data(spec: str | Path | dict[str, Any]) -> dict[str, Any]:
     path = Path(spec) if not isinstance(spec, Path) else spec
 
     # Try as a file path first, otherwise treat as a raw YAML/JSON string
-    text = path.read_text(encoding="utf-8") if path.exists() else str(spec)
+    try:
+        is_file = path.is_file()
+    except OSError:
+        is_file = False
+    text = path.read_text(encoding="utf-8") if is_file else str(spec)
 
     # Try YAML first (superset of JSON)
     try:
@@ -115,8 +119,10 @@ def _build_datasource(ds_spec: dict[str, Any]) -> DatasourceBuilder:
     # Connection
     conn = ds_spec.get("connection", {})
     if isinstance(conn, dict):
-        cls = conn.pop("class", conn.pop("cls", "hyper"))
-        builder.connection(cls, **{k: str(v) for k, v in conn.items()})
+        cls = conn.get("class", conn.get("cls", "hyper"))
+        builder.connection(
+            str(cls), **{k: str(v) for k, v in conn.items() if k not in {"class", "cls"}}
+        )
 
     # Columns
     for col in ds_spec.get("columns", []):
@@ -191,8 +197,8 @@ def _build_worksheet(ws_spec: dict[str, Any], ds_internal_name: str | None) -> W
         builder.filter(
             filt["field"],
             values=filt.get("values"),
-            minimum=filt.get("minimum") or filt.get("min"),
-            maximum=filt.get("maximum") or filt.get("max"),
+            minimum=filt.get("minimum", filt.get("min")),
+            maximum=filt.get("maximum", filt.get("max")),
             filter_type=filt.get("filter_type") or filt.get("type"),
         )
 

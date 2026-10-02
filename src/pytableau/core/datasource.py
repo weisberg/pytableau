@@ -18,6 +18,7 @@ from pytableau.exceptions import (
     DuplicateFieldError,
     FieldNotFoundError,
     HyperError,
+    InvalidWorkbookError,
     TableauConnectionError,
 )
 from pytableau.xml.proxy import XMLNodeProxy
@@ -428,7 +429,9 @@ class Datasource(XMLNodeProxy):
         return self.name == "Parameters"
 
     def _read_fields(self) -> list[Field]:
-        columns = self.xml_node.find("columns") or self.xml_node
+        columns = self.xml_node.find("columns")
+        if columns is None:
+            columns = self.xml_node
         fields: list[Field] = []
         for node in columns.findall("column"):
             field = self._field_from_node(node)
@@ -660,7 +663,9 @@ class Datasource(XMLNodeProxy):
         existing_names = {f.name for f in self._fields}
         existing_names.update({_normalise_field_name(f.caption) for f in self._fields})
         name = _build_calc_name(existing_names)
-        columns = self.xml_node.find("columns") or self.xml_node
+        columns = self.xml_node.find("columns")
+        if columns is None:
+            columns = self.xml_node
         attrs: dict[str, str] = {
             "name": name,
             "caption": normalised_caption,
@@ -726,18 +731,45 @@ class Datasource(XMLNodeProxy):
                 suggestion=_field_suggestion(old_caption, self.field_names),
             )
 
+        worksheets = []
+        actions = []
+        if self._workbook is not None:
+            owners = {
+                ds.name
+                for ds in self._workbook.datasources
+                if ds.get_field(old_caption) is not None
+            }
+            for worksheet in self._workbook.worksheets:
+                dependencies = set(worksheet.datasource_dependencies)
+                relevant = dependencies & owners if dependencies else owners
+                if self.name not in relevant:
+                    continue
+                if len(relevant) > 1:
+                    xml = etree.tostring(worksheet.xml_node, encoding="unicode")
+                    if _contains_field_reference(xml, old_key):
+                        raise InvalidWorkbookError(
+                            f"Cannot safely rename '{old_caption}' in worksheet "
+                            f"'{worksheet.name}': multiple datasources define that field."
+                        )
+                    continue
+                worksheets.append(worksheet)
+            affected_names = {worksheet.name for worksheet in worksheets}
+            for dashboard in self._workbook.dashboards:
+                for action in dashboard.actions:
+                    sheet = action.source_sheet or action.target_sheet
+                    if sheet in affected_names or (sheet is None and owners == {self.name}):
+                        actions.append(action)
+
         field.caption = new_caption
         self._sync_fields()
 
+        for calc in self.calculated_fields:
+            calc.formula = _rename_formula(calc.formula, old_key, new_key)
         if self._workbook is not None:
-            for datasource in self._workbook.datasources:
-                for calc in datasource.calculated_fields:
-                    calc.formula = _rename_formula(calc.formula, old_key, new_key)
-
-            for worksheet in self._workbook.worksheets:
+            for worksheet in worksheets:
                 worksheet.rename_field_reference(old_key, new_key)
-            for dashboard in self._workbook.dashboards:
-                dashboard.replace_field_reference(old_key, new_key)
+            for action in actions:
+                action.replace_field_reference(old_key, new_key)
 
     # ------------------------------------------------------------------
     # .tds / .tdsx standalone open/save (#65)

@@ -61,6 +61,14 @@ class PackageManager:
         assert self._twb_path is not None
         return self._twb_path
 
+    @property
+    def twb_member_name(self) -> str:
+        """Active XML member path, retaining its directory inside a TWBX."""
+        path = self.twb_path
+        if self._working_dir is not None:
+            return path.relative_to(self._working_dir.name).as_posix()
+        return path.name
+
     def _prepare(self) -> None:
         if self._prepared:
             return
@@ -76,48 +84,51 @@ class PackageManager:
             try:
                 with zipfile.ZipFile(self.source) as zf:
                     zf.extractall(extracted)
+                self._twb_path = self._select_twb(extracted)
             except (OSError, zipfile.BadZipFile) as exc:
                 self.close()
                 raise InvalidWorkbookError(f"Unable to read TWBX archive: {self.source}") from exc
-
-            twb_candidates = sorted(extracted.rglob("*.twb"))
-            if not twb_candidates:
-                raise PackageError(f"No .twb file found inside TWBX archive: {self.source}")
-
-            if len(twb_candidates) == 1:
-                self._twb_path = twb_candidates[0]
-                self._prepared = True
-                return
-
-            # Multiple .twb files: apply resolution rules.
-            root_candidates = [p for p in twb_candidates if p.parent == extracted]
-
-            if self._twb_hint is not None:
-                hint_lower = self._twb_hint.lower()
-                matches = [p for p in twb_candidates if p.name.lower() == hint_lower]
-                if len(matches) == 1:
-                    self._twb_path = matches[0]
-                    self._prepared = True
-                    return
-                if len(matches) > 1:
-                    raise AmbiguousWorkbookError(
-                        f"twb_hint '{self._twb_hint}' matched multiple files in {self.source}",
-                        candidates=[str(p.relative_to(extracted)) for p in matches],
-                    )
-                # hint didn't match any file — fall through to standard resolution
-
-            if len(root_candidates) == 1:
-                self._twb_path = root_candidates[0]
-                self._prepared = True
-                return
-
-            candidate_names = [str(p.relative_to(extracted)) for p in twb_candidates]
-            raise AmbiguousWorkbookError(
-                f"Multiple .twb files found in {self.source}; use twb_hint= to specify one.",
-                candidates=candidate_names,
-            )
+            except Exception:
+                self.close()
+                raise
+            self._prepared = True
+            return
 
         raise InvalidWorkbookError(f"Unsupported workbook path: {self.source}")
+
+    def _select_twb(self, extracted: Path) -> Path:
+        twb_candidates = sorted(
+            p for p in extracted.rglob("*") if p.is_file() and p.suffix.lower() == ".twb"
+        )
+        if not twb_candidates:
+            raise PackageError(f"No .twb file found inside TWBX archive: {self.source}")
+        if len(twb_candidates) == 1:
+            return twb_candidates[0]
+
+        if self._twb_hint is not None:
+            matches = [
+                p
+                for p in twb_candidates
+                if p.relative_to(extracted).as_posix().lower() == self._twb_hint.lower()
+            ]
+            if len(matches) == 1:
+                return matches[0]
+            matches = [p for p in twb_candidates if p.name.lower() == self._twb_hint.lower()]
+            if len(matches) == 1:
+                return matches[0]
+            if len(matches) > 1:
+                raise AmbiguousWorkbookError(
+                    f"twb_hint '{self._twb_hint}' matched multiple files in {self.source}",
+                    candidates=[str(p.relative_to(extracted)) for p in matches],
+                )
+
+        root_candidates = [p for p in twb_candidates if p.parent == extracted]
+        if len(root_candidates) == 1:
+            return root_candidates[0]
+        raise AmbiguousWorkbookError(
+            f"Multiple .twb files found in {self.source}; use twb_hint= to specify one.",
+            candidates=[str(p.relative_to(extracted)) for p in twb_candidates],
+        )
 
     def __enter__(self) -> PackageManager:
         self._prepare()
@@ -128,10 +139,11 @@ class PackageManager:
 
     def close(self) -> None:
         """Release temporary extraction state."""
-        if self._working_dir is None:
-            return
-        shutil.rmtree(self._working_dir.name, ignore_errors=True)
-        self._working_dir = None
+        if self._working_dir is not None:
+            self._working_dir.cleanup()
+            self._working_dir = None
+        self._twb_path = None
+        self._prepared = False
 
     def _write_twb(self, source_twb: Path) -> None:
         self._prepare()
@@ -197,11 +209,12 @@ class PackageManager:
     # save_as — deterministic ZIP (#63)
     # ------------------------------------------------------------------
 
-    def save_as(self, destination: str | Path) -> Path:
+    def save_as(self, destination: str | Path, *, source_twb: Path | None = None) -> Path:
         """Save current package state to ``destination``.
 
         Args:
             destination: output workbook path (``.twb`` or ``.twbx``).
+            source_twb: Optional replacement XML, leaving the source file untouched.
 
         Returns:
             Normalized output path.
@@ -211,34 +224,63 @@ class PackageManager:
             raise InvalidWorkbookError("Workbook output must end with .twb or .twbx")
 
         self._prepare()
+        twb_source = source_twb if source_twb is not None else self.twb_path
+        if not twb_source.is_file():
+            raise PackageError(f"Workbook XML file not found: {twb_source}")
         destination.parent.mkdir(parents=True, exist_ok=True)
-
-        if destination.suffix.lower() == ".twb":
-            if self.twb_path.resolve() != destination.resolve():
-                shutil.copy2(self.twb_path, destination)
-            return destination
 
         if self.is_twbx:
             assert self._working_dir is not None
             root = Path(self._working_dir.name)
-            with zipfile.ZipFile(destination, mode="w") as zf:
-                for entry in sorted(root.rglob("*"), key=lambda p: p.relative_to(root).as_posix()):
-                    if entry.is_file():
-                        arcname = entry.relative_to(root).as_posix()
-                        info = zipfile.ZipInfo(arcname, date_time=_EPOCH)
-                        info.compress_type = zipfile.ZIP_DEFLATED
-                        info.extra = b""
-                        info.create_system = 0
-                        zf.writestr(info, entry.read_bytes())
+            entries = {
+                entry.relative_to(root).as_posix(): entry
+                for entry in root.rglob("*")
+                if entry.is_file()
+            }
+            twb_name = self.twb_path.relative_to(root).as_posix()
+        else:
+            root = self.twb_path.parent
+            entries = {
+                entry.relative_to(root).as_posix(): entry
+                for entry in (root / "Data").rglob("*")
+                if entry.is_file() and entry.resolve() != destination.resolve()
+            }
+            twb_name = self.twb_path.name
+        entries[twb_name] = twb_source
+
+        if destination.suffix.lower() == ".twb":
+            targets: set[Path] = set()
+            for name, asset in entries.items():
+                if name.lower().endswith(".twb"):
+                    continue
+                # XML references are relative to the selected TWB, not ZIP root.
+                relative = (
+                    asset.relative_to(self.twb_path.parent)
+                    if asset.is_relative_to(self.twb_path.parent)
+                    else Path(name)
+                )
+                target = destination.parent / relative
+                if target in targets:
+                    raise PackageError(
+                        f"Flattening the active TWB causes an asset collision: {target}"
+                    )
+                targets.add(target)
+                if not target.resolve().is_relative_to(destination.parent.resolve()):
+                    raise InvalidPathError(f"Asset output escapes destination directory: {target}")
+                if target.resolve() != asset.resolve():
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(asset, target)
+            if twb_source.resolve() != destination.resolve():
+                shutil.copy2(twb_source, destination)
             return destination
 
-        # Source was .twb, output is .twbx.
         with zipfile.ZipFile(destination, mode="w") as zf:
-            info = zipfile.ZipInfo(self.twb_path.name, date_time=_EPOCH)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.extra = b""
-            info.create_system = 0
-            zf.writestr(info, self.twb_path.read_bytes())
+            for name, entry in sorted(entries.items()):
+                info = zipfile.ZipInfo(name, date_time=_EPOCH)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.extra = b""
+                info.create_system = 0
+                zf.writestr(info, entry.read_bytes())
         return destination
 
     def __del__(self):

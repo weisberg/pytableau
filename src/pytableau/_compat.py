@@ -16,17 +16,17 @@ class _MissingDependency:
         self._name = name
         self._extra = extra
 
-    def __getattr__(self, attr: str) -> Any:
-        raise ImportError(
+    def __str__(self) -> str:
+        return (
             f"{self._name} is required for this feature. "
             f"Install it with: pip install pytableau[{self._extra}]"
         )
 
+    def __getattr__(self, attr: str) -> Any:
+        raise ImportError(str(self))
+
     def __call__(self, *args: Any, **kwargs: Any) -> Any:
-        raise ImportError(
-            f"{self._name} is required for this feature. "
-            f"Install it with: pip install pytableau[{self._extra}]"
-        )
+        raise ImportError(str(self))
 
 
 def import_optional(module_name: str, extra: str) -> Any:
