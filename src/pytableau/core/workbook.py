@@ -2,8 +2,9 @@
 
 from __future__ import annotations
 
+import re
 import warnings
-import zipfile
+from collections.abc import Callable
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from typing import TYPE_CHECKING, Any, NamedTuple
@@ -13,6 +14,7 @@ from lxml import etree
 from pytableau.constants import DEFAULT_TABLEAU_VERSION, TABLEAU_VERSION_MAP
 from pytableau.exceptions import (
     CorruptWorkbookError,
+    InvalidPathError,
     InvalidWorkbookError,
     LazyNotMaterializedError,
     SchemaValidationError,
@@ -34,6 +36,8 @@ if TYPE_CHECKING:
     from pytableau.exceptions import ValidationIssue
     from pytableau.inspect.diff import Patch, WorkbookDiff
     from pytableau.package.promotion import PromotionChange, PromotionConfig
+    from pytableau.xml.fixers import AutoFixer, FixAction
+    from pytableau.xml.rules import ValidationProfile
 
 
 _SOURCE_BUILD_TO_VERSION = {v: k for k, v in TABLEAU_VERSION_MAP.items()}
@@ -46,6 +50,11 @@ def _normalize_version(source_build: str | None) -> str:
         return source_build
     if source_build in _SOURCE_BUILD_TO_VERSION:
         return _SOURCE_BUILD_TO_VERSION[source_build]
+    match = re.match(r"^(\d{4})(\d)\.", source_build)
+    if match:
+        version = f"{match[1]}.{match[2]}"
+        if version in TABLEAU_VERSION_MAP:
+            return version
     return DEFAULT_TABLEAU_VERSION
 
 
@@ -541,7 +550,9 @@ class Workbook:
 
         return analyze_complexity(self, config)
 
-    def auto_fix(self, rules=None, dry_run: bool = False) -> list:
+    def auto_fix(
+        self, rules: list[AutoFixer] | None = None, dry_run: bool = False
+    ) -> list[FixAction]:
         """Apply auto-fixers to this workbook.
 
         Args:
@@ -556,7 +567,9 @@ class Workbook:
         fixers = rules if rules is not None else _ALL_FIXERS
         return [action for fixer in fixers for action in fixer.fix(self, dry_run=dry_run)]
 
-    def swap_connection(self, where=None, **kwargs) -> SwapResult:
+    def swap_connection(
+        self, where: Callable[[Datasource], bool] | None = None, **kwargs: str | int | None
+    ) -> SwapResult:
         """Swap connection properties across all (or matching) datasources.
 
         Args:
@@ -683,7 +696,12 @@ class Workbook:
         self.save_as(self._path, scrub_credentials=scrub_credentials)
 
     def save_as(self, path: str | Path, *, scrub_credentials: bool = True) -> None:
-        """Save the workbook to a new path."""
+        """Save to a new path without rewriting the original workbook.
+
+        The workbook file is staged beside the destination and replaced atomically
+        after successful serialization. Assets for plain TWB output are installed
+        individually. Subsequent :meth:`save` calls use this path.
+        """
         destination = Path(path).expanduser()
         if destination.suffix.lower() not in {".twb", ".twbx"}:
             raise InvalidWorkbookError("Workbook path must end with .twb or .twbx")
@@ -697,25 +715,51 @@ class Workbook:
             if issue.level == "error":
                 raise SchemaValidationError(f"Workbook is invalid: {issue}")
 
-        if self._package_manager is not None:
-            working_twb = self._package_manager.twb_path
-            self._write_twb(working_twb)
-            self._package_manager.save_as(destination)
-            self._path = destination
-            return
-
-        if destination.suffix.lower() == ".twb":
-            self._write_twb(destination)
-            self._path = destination
-            return
-
-        with TemporaryDirectory(prefix="pytableau-") as temp_dir:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        if (
+            destination.suffix.lower() == ".twb"
+            and self._package_manager is not None
+            and self._package_manager.is_twbx
+        ):
+            active_directory = self._package_manager.twb_path.parent
+            for datasource in self.datasources:
+                if (
+                    datasource._hyper_path is not None
+                    and not datasource._hyper_path.resolve().is_relative_to(
+                        active_directory.resolve()
+                    )
+                ):
+                    raise InvalidWorkbookError(
+                        "Plain TWB output cannot retain extract references outside the active "
+                        "workbook directory; save as TWBX to preserve that layout."
+                    )
+        with TemporaryDirectory(prefix="pytableau-save-", dir=destination.parent) as temp_dir:
             work_twb = Path(temp_dir) / "workbook.twb"
             self._write_twb(work_twb)
-            with zipfile.ZipFile(destination, "w", compression=zipfile.ZIP_DEFLATED) as zf:
-                zf.write(work_twb, work_twb.name)
+            output_dir = Path(temp_dir) / "output"
+            output_dir.mkdir()
+            staged = output_dir / destination.name
+            manager = self._package_manager or PackageManager(work_twb)
+            active_twb_name = manager.twb_member_name
+            manager.save_as(staged, source_twb=work_twb)
+            for asset in sorted(output_dir.rglob("*")):
+                if asset.is_file() and asset != staged:
+                    target = destination.parent / asset.relative_to(output_dir)
+                    if not target.resolve().is_relative_to(destination.parent.resolve()):
+                        raise InvalidPathError(
+                            f"Asset output escapes destination directory: {target}"
+                        )
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    asset.replace(target)
+            staged.replace(destination)
 
         self._path = destination
+        previous_manager = self._package_manager
+        self._package_manager = PackageManager(destination, twb_hint=active_twb_name)
+        for datasource in self.datasources:
+            datasource._set_hyper_path(datasource._discover_hyper_path())
+        if previous_manager is not None:
+            previous_manager.close()
 
     def publish(self, server: str, project: str, **auth: object) -> None:
         """Publish this workbook to Tableau Server or Cloud."""
@@ -758,7 +802,7 @@ class Workbook:
         )
         return xml.decode("utf-8")
 
-    def validate(self, profile=None) -> list[ValidationIssue]:
+    def validate(self, profile: ValidationProfile | None = None) -> list[ValidationIssue]:
         """Validate the workbook XML against known schema rules.
 
         Args:

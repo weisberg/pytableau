@@ -23,5 +23,5 @@ def test_query_returns_filtered_rows(tmp_path):
     bridge = HyperBridge(tmp_path / "query.hyper")
     bridge.from_dataframe(df)
 
-    result = bridge.query("SELECT A FROM [Extract] WHERE A > 1")
+    result = bridge.query('SELECT "A" FROM "Extract" WHERE "A" > 1')
     assert list(result["A"]) == [2, 3]

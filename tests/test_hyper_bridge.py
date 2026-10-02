@@ -43,6 +43,6 @@ def test_hyper_bridge_query_row_count(tmp_path):
     bridge = HyperBridge(tmp_path / "sample_query.hyper")
     bridge.from_dataframe(df)
 
-    result = bridge.query("SELECT COUNT(*) AS row_count FROM [Extract]")
+    result = bridge.query('SELECT COUNT(*) AS row_count FROM "Extract"')
     assert isinstance(result, pd.DataFrame)
     assert result.iloc[0, 0] == len(df)

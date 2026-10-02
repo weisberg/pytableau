@@ -254,19 +254,20 @@ class DatasourceBuilder:
             "NUMERIC": (DataType.REAL, Role.MEASURE),
         }
 
-        with HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp, Connection(
-            hp.endpoint, str(path)
-        ) as conn:
-                for schema in conn.catalog.get_schema_names():
-                    for table in conn.catalog.get_table_names(schema):
-                        defn = conn.catalog.get_table_definition(table)
-                        for col in defn.columns:
-                            type_tag = str(col.type).split("(")[0].upper()
-                            dt, role = _HYPER_TYPE_MAP.get(
-                                type_tag,
-                                (DataType.STRING, Role.DIMENSION),
-                            )
-                            builder.column(col.name.unescaped, dt, role)
+        with (
+            HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp,
+            Connection(hp.endpoint, str(path)) as conn,
+        ):
+            for schema in conn.catalog.get_schema_names():
+                for table in conn.catalog.get_table_names(schema):
+                    defn = conn.catalog.get_table_definition(table)
+                    for col in defn.columns:
+                        type_tag = str(col.type).split("(")[0].upper()
+                        dt, role = _HYPER_TYPE_MAP.get(
+                            type_tag,
+                            (DataType.STRING, Role.DIMENSION),
+                        )
+                        builder.column(col.name.unescaped, dt, role)
 
         return builder
 

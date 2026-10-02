@@ -5,6 +5,12 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+from uuid import uuid4
+
+from pytableau.constants import TABLEAU_VERSION_MAP
+from pytableau.exceptions import InvalidPathError, SchemaValidationError
+
+from ._paths import DEFAULT_PATTERN, workbook_paths
 
 
 @dataclass
@@ -86,7 +92,7 @@ class MigrationPlan:
     def __init__(self) -> None:
         self._source: Path | None = None
         self._output: Path | None = None
-        self._pattern: str = "**/*.tw[bx]"
+        self._pattern: str = DEFAULT_PATTERN
         self._target_version: str | None = None
         self._connection_swaps: dict[str, str] = {}
         self._field_renames: dict[str, str] = {}
@@ -103,12 +109,14 @@ class MigrationPlan:
         return self
 
     def pattern(self, glob: str) -> MigrationPlan:
-        """Override the glob pattern used to find workbooks (default ``**/*.tw[bx]``)."""
+        """Override the glob pattern used to find workbooks (default ``**/*.twb*``)."""
         self._pattern = glob
         return self
 
     def target_version(self, version: str) -> MigrationPlan:
         """Pin the ``source-build`` attribute to a known Tableau version string."""
+        if version not in TABLEAU_VERSION_MAP:
+            raise ValueError(f"Unsupported Tableau version: {version}")
         self._target_version = version
         return self
 
@@ -147,7 +155,14 @@ class MigrationEngine:
         if plan._source is None:
             raise ValueError("MigrationPlan.source_directory() is required.")
 
-        paths = sorted(plan._source.glob(plan._pattern))
+        paths = workbook_paths(plan._source, plan._pattern)
+        if (
+            plan._output is not None
+            and plan._output.resolve() != plan._source.resolve()
+            and plan._output.resolve().is_relative_to(plan._source.resolve())
+        ):
+            output = plan._output.resolve()
+            paths = [p for p in paths if not p.resolve().is_relative_to(output)]
         results: list[MigrationResult] = []
 
         for path in paths:
@@ -159,41 +174,61 @@ class MigrationEngine:
     def _migrate_one(self, path: Path, *, dry_run: bool) -> MigrationResult:
         plan = self._plan
         changes: list[str] = []
+        wb = None
         try:
             from pytableau.core.workbook import Workbook
 
             wb = Workbook.open(path)
 
+            if plan._target_version is not None and wb.version != plan._target_version:
+                old_version = wb.version
+                wb.migrate_version(plan._target_version)
+                changes.append(f"target_version: {old_version!r} → {plan._target_version!r}")
+
             # Connection swaps
-            for old_server, new_server in plan._connection_swaps.items():
-                for ds in wb.datasources:
-                    if ds.is_parameters:
-                        continue
-                    for conn in ds.connections:
-                        if conn.server and old_server in (conn.server or ""):
-                            conn.server = new_server
-                            changes.append(
-                                f"swap_connection: {old_server!r} → {new_server!r} in {ds.name!r}"
-                            )
+            for ds in wb.datasources:
+                for conn in ds.connections:
+                    old_server = conn.server
+                    new_server = plan._connection_swaps.get(old_server) if old_server else None
+                    if new_server is not None and old_server != new_server:
+                        conn.server = new_server
+                        changes.append(
+                            f"swap_connection: {old_server!r} → {new_server!r} in {ds.name!r}"
+                        )
 
             # Field renames
-            for old_caption, new_caption in plan._field_renames.items():
-                for ds in wb.datasources:
-                    if ds.is_parameters:
-                        continue
-                    if ds.get_field(old_caption) is not None:
-                        ds.rename_field(old_caption, new_caption)
-                        changes.append(
-                            f"rename_field: {old_caption!r} → {new_caption!r} in {ds.name!r}"
-                        )
+            for ds in wb.datasources:
+                selected = []
+                for old_caption, new_caption in plan._field_renames.items():
+                    field = ds.get_field(old_caption)
+                    if field is not None and old_caption != new_caption:
+                        selected.append((field.caption, new_caption, f"__rename_{uuid4().hex}"))
+                # Apply mappings to original captions, including chains and cycles.
+                for old_caption, _, temporary in selected:
+                    ds.rename_field(old_caption, temporary)
+                for old_caption, new_caption, temporary in selected:
+                    ds.rename_field(temporary, new_caption)
+                    changes.append(
+                        f"rename_field: {old_caption!r} → {new_caption!r} in {ds.name!r}"
+                    )
+
+            if plan._validate:
+                errors = [issue for issue in wb.validate() if issue.level == "error"]
+                if errors:
+                    raise SchemaValidationError("; ".join(str(issue) for issue in errors))
 
             if not changes:
                 return MigrationResult(path=path, output_path=None, status="skipped", changes=[])
 
+            assert plan._source is not None
+            out_path = (
+                plan._output / path.relative_to(plan._source) if plan._output is not None else path
+            )
+            if plan._output is not None and not out_path.resolve().is_relative_to(
+                plan._output.resolve()
+            ):
+                raise InvalidPathError(f"Output path escapes migration directory: {out_path}")
             if not dry_run:
-                output_dir = plan._output or path.parent
-                output_dir.mkdir(parents=True, exist_ok=True)
-                out_path = output_dir / path.name
                 wb.save_as(out_path)
                 return MigrationResult(
                     path=path, output_path=out_path, status="migrated", changes=changes
@@ -210,3 +245,6 @@ class MigrationEngine:
                 status="error",
                 error=f"{type(exc).__name__}: {exc}",
             )
+        finally:
+            if wb is not None:
+                wb.close()

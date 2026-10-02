@@ -21,6 +21,7 @@ plugins:
 nav:
   - Home: index.md
   - Quickstart: quickstart.md
+  - Maintenance and I/O: maintenance.md
   - API:
       - Overview: api/index.md
       - Governance: api/governance.md

@@ -940,7 +940,7 @@ def fleet_scan(
     ] = None,
     pattern: Annotated[
         str, Option("--pattern", help="Glob pattern for workbook files")
-    ] = "**/*.tw[bx]",
+    ] = "**/*.twb*",
 ) -> dict:
     """Scan a directory of workbooks and report fleet health metrics."""
     from pytableau.fleet import FleetScanner

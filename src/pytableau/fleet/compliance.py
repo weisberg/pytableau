@@ -20,6 +20,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ._paths import DEFAULT_PATTERN, workbook_paths
+
 if TYPE_CHECKING:
     from pytableau.governance.rules import GovernanceRuleset
 
@@ -85,16 +87,16 @@ class ComplianceRunner:
         self,
         directory: str | Path,
         *,
-        pattern: str = "**/*.tw[bx]",
+        pattern: str = DEFAULT_PATTERN,
     ) -> list[ComplianceResult]:
         """Check every workbook in *directory* against the ruleset."""
         from pytableau.core.workbook import Workbook
 
         results: list[ComplianceResult] = []
-        for path in sorted(Path(directory).glob(pattern)):
+        for path in workbook_paths(Path(directory), pattern):
             try:
-                wb = Workbook.open(path)
-                issues = self._ruleset.check(wb)
+                with Workbook.open(path) as wb:
+                    issues = self._ruleset.check(wb)
                 result_issues = [
                     {"rule": i.rule, "severity": i.severity, "message": i.message} for i in issues
                 ]

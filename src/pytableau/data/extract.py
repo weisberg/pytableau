@@ -107,44 +107,14 @@ class ExtractManager:
         if datasource._hyper_path is None:
             raise HyperError("No extract path is associated with this datasource.")
 
-        from pytableau._compat import import_optional
+        if key_columns is not None:
+            from pytableau.data.bridge import HyperFile
 
-        pd = import_optional("pandas", "pandas")
-        tableauhyperapi = import_optional("tableauhyperapi", "hyper")
-        HyperProcess = tableauhyperapi.HyperProcess
-        Telemetry = tableauhyperapi.Telemetry
-        Connection = tableauhyperapi.Connection
-        TableName = tableauhyperapi.TableName
-        pantab = import_optional("pantab", "hyper")
-
-        hyper_path = datasource._hyper_path
-        schema_name = "Extract"
-        tname = TableName(schema_name, table)
-
-        if key_columns:
-            # DELETE matching rows then re-insert (DELETE+INSERT upsert pattern)
-            with (
-                HyperProcess(Telemetry.DO_NOT_SEND_USAGE_DATA_TO_TABLEAU) as hp,
-                Connection(hp.endpoint, str(hyper_path)) as conn,
-            ):
-                # Build DELETE predicate
-                conditions = " AND ".join(f'"{col}" = ?' for col in key_columns)
-                # Execute row-by-row deletion for matching keys
-                for _, row in pd.DataFrame(df)[key_columns].drop_duplicates().iterrows():
-                    values = [row[col] for col in key_columns]
-                    conn.execute_command(
-                        f"DELETE FROM {tname} WHERE {conditions}",
-                        parameters=values,
-                    )
-
-        # Append the new/updated rows
-        pantab.frame_to_hyper(
-            pd.DataFrame(df),
-            hyper_path,
-            table=tname,
-            table_mode="a",
-        )
-        return len(pd.DataFrame(df))
+            with HyperFile(datasource._hyper_path) as hf:
+                _, inserted = hf.upsert(df, key_columns, table=table)
+            return inserted
+        HyperBridge(datasource._hyper_path).append_dataframe(df, table=table)
+        return len(df)
 
     def detach(self, datasource) -> None:
         """Convert extract-based datasource back to a live connection placeholder."""

@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
+from ._paths import DEFAULT_PATTERN, workbook_paths
+
 if TYPE_CHECKING:
     from pytableau.fleet.report import FleetReport
 
@@ -57,6 +59,7 @@ class WorkbookScan:
 
 def _scan_one(path: Path) -> WorkbookScan:
     """Open and analyse a single workbook, returning a WorkbookScan."""
+    wb = None
     try:
         from pytableau.calculations.linter import lint_workbook
         from pytableau.core.workbook import Workbook
@@ -122,6 +125,9 @@ def _scan_one(path: Path) -> WorkbookScan:
             status="error",
             error=f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=3)}",
         )
+    finally:
+        if wb is not None:
+            wb.close()
 
 
 class FleetScanner:
@@ -135,14 +141,14 @@ class FleetScanner:
         scanner.report().to_html("fleet_health.html")
     """
 
-    def __init__(self, directory: str | Path, *, pattern: str = "**/*.tw[bx]") -> None:
+    def __init__(self, directory: str | Path, *, pattern: str = DEFAULT_PATTERN) -> None:
         self._directory = Path(directory)
         self._pattern = pattern
         self._scans: list[WorkbookScan] = []
 
     def scan(self) -> FleetScanner:
         """Scan all matching workbooks.  Returns ``self`` for chaining."""
-        paths = sorted(self._directory.glob(self._pattern))
+        paths = workbook_paths(self._directory, self._pattern)
         self._scans = [_scan_one(p) for p in paths]
         return self
 

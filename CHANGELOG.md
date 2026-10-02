@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [2.0.2] — Unreleased
+
+### Fixed
+- `Workbook.save_as()` preserves the source, stages the workbook file atomically, and rebases extract paths; nested output directories and deterministic new TWBX archives work correctly.
+- Standalone TWB packaging includes adjacent `Data/` assets, and plain TWB copies retain packaged assets. Generated workbooks retain attached extracts; package preparation cleans up failed extraction state and can restart after `close()`.
+- Saves retain the active selection in multi-TWB packages and correctly copy extracts relative to a nested active TWB. Plain output rejects extract layouts it cannot preserve.
+- Tableau version detection accepts build variants from the same release instead of requiring one exact build number.
+- Fleet scanning, compliance, migration, and CLI discovery include TWBX packages, exclude non-workbook files, and close workbook resources.
+- Migration applies `target_version()` and `validate_all()` in dry runs, applies mappings once to original values, matches complete hostnames, preserves relative subdirectories, excludes nested output directories from subsequent runs, and rejects paths that escape the output through child symlinks.
+- Hyper I/O uses supported pantab and Tableau APIs, preserves unrelated tables, retains query column names, and reads metadata through the Hyper catalog.
+- Hyper upserts support composite and null keys and absent target tables; upserts, bulk replacements, and rolling refreshes stage changes so failed writes preserve the original extract. Empty bulk inserts clear stale rows; invalid batch sizes fail explicitly.
+- Missing optional dependencies provide actionable installation errors without deleting existing extracts.
+- Spec building preserves caller dictionaries and zero filter bounds and accepts long inline specs. Empty `<columns/>` containers receive calculated fields correctly.
+- Field renames preserve unrelated datasource calculations and worksheet references, and reject ambiguous worksheet ownership before mutation.
+- README transaction, extract, fleet, compliance, and migration examples match the public API.
+
+### Changed
+- Patch version advanced to 2.0.2; Python tooling and CI align with the supported Python 3.11+ minimum.
+- The `hyper` extra includes pandas, and development no longer requires a sibling `tooli` checkout. The uv lockfile is synchronized with current package metadata.
+- CI includes a separate job exercising real Hyper operations with published dependencies.
+
+---
+
 ## [2.0.1] — 2026-02-24
 
 ### Fixed

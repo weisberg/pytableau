@@ -130,12 +130,14 @@ def quick_chart(
     ds_container = wb.xml_root.find("datasources")
     if ds_container is None:
         from lxml import etree as _etree
+
         ds_container = _etree.SubElement(wb.xml_root, "datasources")
     ds_container.append(ds_node)
 
     ws_container = wb.xml_root.find("worksheets")
     if ws_container is None:
         from lxml import etree as _etree
+
         ws_container = _etree.SubElement(wb.xml_root, "worksheets")
     ws_container.append(ws_node)
 
@@ -244,12 +246,14 @@ def quick_dashboard(
     ds_container = wb.xml_root.find("datasources")
     if ds_container is None:
         from lxml import etree as _etree
+
         ds_container = _etree.SubElement(wb.xml_root, "datasources")
     ds_container.append(ds_builder.build())
 
     ws_container = wb.xml_root.find("worksheets")
     if ws_container is None:
         from lxml import etree as _etree
+
         ws_container = _etree.SubElement(wb.xml_root, "worksheets")
     for node in ws_nodes:
         ws_container.append(node)
@@ -257,6 +261,7 @@ def quick_dashboard(
     dash_container = wb.xml_root.find("dashboards")
     if dash_container is None:
         from lxml import etree as _etree
+
         dash_container = _etree.SubElement(wb.xml_root, "dashboards")
     dash_container.append(dash_builder.build())
 

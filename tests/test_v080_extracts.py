@@ -18,6 +18,8 @@ pytestmark = pytest.mark.requires_hyper
 def sample_df():
     """Small DataFrame for testing."""
     pandas = pytest.importorskip("pandas")
+    pytest.importorskip("pantab")
+    pytest.importorskip("tableauhyperapi")
     return pandas.DataFrame(
         {
             "Date": pandas.date_range("2024-01-01", periods=10, freq="D"),

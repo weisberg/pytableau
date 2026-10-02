@@ -288,14 +288,17 @@ class Worksheet(XMLNodeProxy):
             node.text = _encode_refs(refs)
 
     def _read_datasource_dependencies(self) -> list[str]:
-        container = self.xml_node.find("datasource-dependencies")
-        if container is None:
-            return []
         names: list[str] = []
-        for node in container.findall("datasource"):
+        for container in self.xml_node.findall(".//datasource-dependencies"):
+            if container.get("datasource"):
+                names.append(container.get("datasource") or "")
+            for node in container.findall("datasource"):
+                if node.get("name"):
+                    names.append(node.get("name") or "")
+        for node in self.xml_node.findall(".//view/datasources/datasource"):
             if node.get("name"):
                 names.append(node.get("name") or "")
-        return names
+        return list(dict.fromkeys(names))
 
     def _field_exists(self, field: str) -> bool:
         if self._workbook is None:
