@@ -73,6 +73,10 @@ Repository = "https://github.com/weisberg/pytableau"
 packages = ["src/pytableau"]
 include = ["src/pytableau/**/*.twb"]
 
+# Publish project artifacts, excluding local agent instructions and runtime logs.
+[tool.hatch.build.targets.sdist]
+only-include = ["src", "tests", "docs", "examples", "README.md", "CHANGELOG.md", "LICENSE", "pyproject.toml", "mkdocs.yml", "uv.lock"]
+
 # ---------------------------------------------------------------------------
 # Ruff
 # ---------------------------------------------------------------------------

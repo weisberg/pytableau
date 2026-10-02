@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [3.0.0] — Unreleased
+
+### Added
+- Complete document and working-asset diffs, serializable snapshot patches, strict stale-input fingerprints, package-layout changes and atomic rollback. Manual structural patch operations accept full XML payloads and preserve their actual scope.
+- Lossless datasource-qualified field and instance references; scoped calculation, worksheet, action, join and relationship impact analysis. Implicit metadata fields and worksheet-local calculations resolve without modifying XML on read.
+- Semantic validation for references, cycles, assets, named connections, logical endpoints/keys, joins and native instance types. Capability reports distinguish supported, unsupported and unverified targets and allow custom documented capability rules.
+- Durable migration preparation, per-file installation journals, source/output preflight hashes, interruption recovery, and rollback that restores previous destinations and rejects external edits.
+- Typed extract contracts for schema/table identity, nullability, keys, decimals, dates and timezones; strict/additive/replace schema policies, combined-data key validation, explicit backfills, preservation of unrelated tables and staged XML metadata.
+- Native physical join trees/custom SQL, logical objects and relationships with named physical connections, independent mark panes, synchronized dual axes, quick table calculations with addressing/partitioning, formatting read/write, and builder/spec parity.
+
+### Breaking changes
+- `migrate_version()` refuses unverified downgrades by default. `allow_unverified=True` allows a header update when the report is unverified; known unsupported capabilities always fail. API, CLI and fleet plans expose the override.
+- Workbook transactions isolate owned extract writes until `save()` after commit. Saving within a transaction and using uncaptured external extracts are rejected. File-based recovery belongs to migration manifests.
+- `validate()` performs semantic checks by default. `semantic=False` retains structural validation. Patches with `validate=True` roll back on semantic errors; unsupported operations and incomplete structural payloads fail.
+
+### Fixed
+- Native field renames/removals respect datasource identity and instance definitions; calculation strings/comments and static formatted text are preserved. Referenced relationship keys cannot be deleted silently.
+- Build version detection reads release/patch strings and retains unknown parsed release versions. Physical fields present only in metadata now appear in field inventories.
+- Working asset inventories include additions/deletions and referenced images; deleting an owned plain-workbook asset persists through save/reopen, including nested package layouts. Failed plain saves restore all installed sidecars and XML. XML comments, processing instructions and pending-deletion baselines survive rollback.
+- Cached workbook Hyper handles follow isolated transaction storage. Native extract contracts preserve live federated connections and logical models; dropped physical fields are checked against dependent calculations.
+- Decimal values retain exact precision independently of the caller context; wider numerics upgrade staged files to Hyper format 3. Sub-microsecond timestamps are rejected instead of truncated. The Hyper API minimum is 0.0.19484.
+
+- Source distributions include explicit project artifacts and exclude local agent instructions, review gates and Hyper runtime logs.
+
+### Validation boundaries
+- Automated tests exercise XML/package round trips and real Hyper operations. Tableau Desktop/Server rendering acceptance has not been performed in this environment. XML capability checks are conservative and do not claim universal proprietary-format conversion.
+
+---
+
 ## [2.0.2] — Unreleased
 
 ### Fixed
