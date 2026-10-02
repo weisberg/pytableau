@@ -4,12 +4,12 @@ from __future__ import annotations
 
 import re
 import warnings
-from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 from lxml import etree
 
 from pytableau.constants import DataType, ParameterDomainType, Role
+from pytableau.core.references import FieldReference
 from pytableau.xml.proxy import XMLNodeProxy
 
 if TYPE_CHECKING:
@@ -57,24 +57,6 @@ def _coerce_value(value: object | None, datatype: str | DataType | None) -> obje
     if target == DataType.DATETIME:
         return str(value)
     return str(value)
-
-
-@dataclass(frozen=True)
-class FieldReference:
-    """Reference to a Tableau field in shelf/filter markup.
-
-    The name intentionally stores the bracketless field caption.
-    """
-
-    name: str
-
-    @classmethod
-    def parse(cls, text: str) -> FieldReference:
-        normalized = _normalise_field_caption(text)
-        return cls(normalized)
-
-    def __str__(self) -> str:
-        return _format_field_caption(self.name)
 
 
 class FieldCollection:
@@ -144,6 +126,14 @@ class Field(XMLNodeProxy):
         super().__init__(node)
         self._datasource = datasource
 
+    def _ensure_attached(self) -> None:
+        """Materialize an implicit metadata field only when it is edited."""
+        if self.xml_node.getparent() is None and self._datasource is not None:
+            parent = self._datasource.xml_node.find("columns")
+            if parent is None:
+                parent = self._datasource.xml_node
+            parent.append(self.xml_node)
+
     @property
     def name(self) -> str:
         return self.xml_node.get("name", "")
@@ -154,6 +144,7 @@ class Field(XMLNodeProxy):
 
     @caption.setter
     def caption(self, value: str) -> None:
+        self._ensure_attached()
         self.xml_node.set("caption", value)
 
     @property
@@ -162,6 +153,7 @@ class Field(XMLNodeProxy):
 
     @datatype.setter
     def datatype(self, value: DataType | str) -> None:
+        self._ensure_attached()
         if isinstance(value, DataType):
             value = value.value
         self.xml_node.set("datatype", str(value))
@@ -172,6 +164,7 @@ class Field(XMLNodeProxy):
 
     @role.setter
     def role(self, value: Role | str) -> None:
+        self._ensure_attached()
         if isinstance(value, Role):
             value = value.value
         self.xml_node.set("role", str(value))
@@ -182,6 +175,7 @@ class Field(XMLNodeProxy):
 
     @hidden.setter
     def hidden(self, value: bool) -> None:
+        self._ensure_attached()
         self.xml_node.set("hidden", "true" if value else "false")
 
 

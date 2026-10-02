@@ -759,7 +759,11 @@ class TestBreakingChanges:
 
         assert ConnectionError is TableauConnectionError
 
-    def test_version_is_2_alpha(self):
+    def test_version_matches_project_metadata(self):
+        import tomllib
+        from pathlib import Path
+
         import pytableau
 
-        assert pytableau.__version__.startswith("2.")
+        metadata = tomllib.loads((Path(__file__).parents[1] / "pyproject.toml").read_text())
+        assert pytableau.__version__ == metadata["project"]["version"]

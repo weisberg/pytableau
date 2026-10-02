@@ -26,15 +26,44 @@ class HyperBridge:
         path: str | Path,
         *,
         on_write: Callable[[Any, str], None] | None = None,
+        path_provider: Callable[[], Path] | None = None,
     ) -> None:
-        self.path = Path(path)
+        self._path = Path(path)
+        self._path_provider = path_provider
         self._on_write = on_write
+
+    @property
+    def path(self) -> Path:
+        """Resolve workbook-owned handles against the current transaction storage."""
+        return self._path_provider() if self._path_provider is not None else self._path
+
+    @path.setter
+    def path(self, value: Path | str) -> None:
+        self._path = Path(value)
 
     @staticmethod
     def _require(module: Any, feature: str) -> Any:
         if isinstance(module, _MissingDependency):
             raise ImportError(str(module))
         return module
+
+    @staticmethod
+    def _table_name(table: Any) -> Any:
+        api = HyperBridge._require(_hyperapi, "tableauhyperapi")
+        if hasattr(table, "schema") and hasattr(table, "name"):
+            return api.TableName(table.schema, table.name)
+        return api.TableName(table)
+
+    def table_identities(self) -> list[Any]:
+        """Return schema-qualified identities without flattening duplicate names."""
+        from .contracts import TableIdentity
+
+        with self._connection() as connection:
+            return [
+                TableIdentity(schema.name.unescaped, table.name.unescaped)
+                for schema in connection.catalog.get_schema_names()
+                for table in connection.catalog.get_table_names(schema)
+            ]
 
     @staticmethod
     def _as_callable(module: Any, name: str) -> Callable[..., Any]:
@@ -58,15 +87,19 @@ class HyperBridge:
         if mode == "replace" and self.path.exists():
             # pantab's write mode replaces the entire database. Replace just the
             # requested table in a copy, then install it after a successful write.
-            hyperapi = self._require(_hyperapi, "tableauhyperapi")
             with TemporaryDirectory(prefix="pytableau-write-", dir=self.path.parent) as temp_dir:
                 staged = Path(temp_dir) / "staged.hyper"
                 shutil.copy2(self.path, staged)
-                HyperBridge(staged).execute(f"DROP TABLE IF EXISTS {hyperapi.TableName(table)}")
-                writer(df, str(staged), table=table, table_mode="a")
+                HyperBridge(staged).execute(f"DROP TABLE IF EXISTS {self._table_name(table)}")
+                writer(df, str(staged), table=self._table_name(table), table_mode="a")
                 staged.replace(self.path)
         else:
-            writer(df, str(self.path), table=table, table_mode="w" if mode == "replace" else "a")
+            writer(
+                df,
+                str(self.path),
+                table=self._table_name(table),
+                table_mode="w" if mode == "replace" else "a",
+            )
 
         if self._on_write is not None:
             self._on_write(df, table)
@@ -75,7 +108,7 @@ class HyperBridge:
         self._require(_pandas, "pandas")
         pantab = self._require(_pantab, "pantab")
         reader = self._as_callable(pantab, "frame_from_hyper")
-        output = reader(str(self.path), table=table)
+        output = reader(str(self.path), table=self._table_name(table))
         if isinstance(output, list):
             pandas_module = self._require(_pandas, "pandas")
             return pandas_module.DataFrame(output)
@@ -125,17 +158,15 @@ class HyperBridge:
             ]
 
     def schema(self, table: str) -> list[dict[str, str]]:
-        hyperapi = self._require(_hyperapi, "tableauhyperapi")
         with self._connection() as connection:
-            definition = connection.catalog.get_table_definition(hyperapi.TableName(table))
+            definition = connection.catalog.get_table_definition(self._table_name(table))
             return [
                 {"name": column.name.unescaped, "type": str(column.type)}
                 for column in definition.columns
             ]
 
     def row_count(self, table: str) -> int:
-        hyperapi = self._require(_hyperapi, "tableauhyperapi")
-        rows = self.query(f"SELECT COUNT(*) AS __count FROM {hyperapi.TableName(table)}")
+        rows = self.query(f"SELECT COUNT(*) AS __count FROM {self._table_name(table)}")
         if len(rows) == 0:
             return 0
         return int(rows.iloc[0, 0])
@@ -248,7 +279,7 @@ class HyperFile:
                 shutil.copy2(self._path, staged_path)
                 bridge = HyperBridge(staged_path)
                 bridge.execute(
-                    f"DELETE FROM {hyperapi.TableName(table)} "
+                    f"DELETE FROM {self._b._table_name(table)} "
                     f"WHERE {hyperapi.Name(date_col)} < DATE '{cutoff}'"
                 )
                 bridge.append_dataframe(df, table=table)
@@ -286,7 +317,7 @@ class HyperFile:
             self._b.from_dataframe(df, table=table)
             return 0, len(df)
         with self._b._connection() as connection:
-            has_table = connection.catalog.has_table(hyperapi.TableName(table))
+            has_table = connection.catalog.has_table(self._b._table_name(table))
         if not has_table:
             self._b.append_dataframe(df, table=table)
             return 0, len(df)
@@ -296,7 +327,7 @@ class HyperFile:
             shutil.copy2(self._path, staged_path)
             stage_name = f"__pytableau_upsert_{uuid4().hex}"
             HyperBridge(staged_path).from_dataframe(df, table=stage_name)
-            target = hyperapi.TableName(table)
+            target = self._b._table_name(table)
             stage = hyperapi.TableName(stage_name)
             predicates = " AND ".join(
                 f"target.{hyperapi.Name(col)} IS NOT DISTINCT FROM incoming.{hyperapi.Name(col)}"

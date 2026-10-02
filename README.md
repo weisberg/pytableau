@@ -10,6 +10,20 @@
 
 ---
 
+## 3.0 workbook engineering (unreleased)
+
+The development branch adds complete XML and asset patches, scoped reference impact analysis,
+semantic validation and conservative compatibility checks, durable migration journals,
+typed extract contracts, and native joins, relationships, dual axes and table calculations.
+See the [engineering guide](docs/engineering.md) and runnable
+[example](examples/12_workbook_engineering.py).
+
+Upgrading changes three behaviors: unverified downgrades require an explicit override;
+workbook transactions stage extract changes until a subsequent save and reject saves inside
+the transaction; malformed or incomplete patches fail instead of reporting success.
+`validate()` now includes semantic checks; use `semantic=False` for the old structural check.
+This release is awaiting review and is not published to PyPI.
+
 ## Why pytableau?
 
 The Tableau Python ecosystem is fragmented. Tableau/Salesforce maintains several narrow libraries, each covering a single concern:
@@ -368,7 +382,7 @@ pytableau unpackage workbook.twbx
 | `governance` | 6 configurable lint rules, YAML rulesets | ✅ |
 | `governance` | `WorkbookIndex` — SQLite cross-workbook search | ✅ |
 | `agents` | `describe()`, `available_fields()`, `capabilities()` | ✅ |
-| `agents` | `WorkbookTransaction` with XML rollback | ✅ |
+| `agents` | `WorkbookTransaction` with XML and owned-asset isolation | ✅ |
 | `fleet` | `FleetScanner` — scan directory, grade workbooks | ✅ |
 | `fleet` | `MigrationPlan` / `MigrationEngine` — bulk migration | ✅ |
 | `fleet` | `ComplianceRunner` + JUnit XML for CI/CD | ✅ |

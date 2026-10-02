@@ -48,6 +48,8 @@ class PackageManager:
         self._twb_path: Path | None = None
         self._working_dir: TemporaryDirectory[str] | None = None
         self._prepared = False
+        self._snapshot_plain = False
+        self._source_storage: TemporaryDirectory[str] | None = None
 
     @property
     def is_twbx(self) -> bool:
@@ -144,6 +146,9 @@ class PackageManager:
             self._working_dir = None
         self._twb_path = None
         self._prepared = False
+        if self._source_storage is not None:
+            self._source_storage.cleanup()
+            self._source_storage = None
 
     def _write_twb(self, source_twb: Path) -> None:
         self._prepare()
@@ -161,9 +166,14 @@ class PackageManager:
         """Return sorted list of non-``.twb`` ZIP member paths."""
         if not self.is_twbx:
             return []
-        with zipfile.ZipFile(self.source) as zf:
-            names = [n for n in zf.namelist() if not n.lower().endswith(".twb")]
-        return sorted(names)
+        self._prepare()
+        assert self._working_dir is not None
+        root = Path(self._working_dir.name)
+        return sorted(
+            p.relative_to(root).as_posix()
+            for p in root.rglob("*")
+            if p.is_file() and p != self.twb_path
+        )
 
     def glob(self, pattern: str) -> list[str]:
         """Return assets matching *pattern* (fnmatch syntax)."""
@@ -240,10 +250,19 @@ class PackageManager:
             twb_name = self.twb_path.relative_to(root).as_posix()
         else:
             root = self.twb_path.parent
+            from lxml import etree
+
+            from .assets import owned_assets
+
+            tree = etree.parse(
+                str(twb_source), etree.XMLParser(resolve_entities=False, no_network=True)
+            )
             entries = {
-                entry.relative_to(root).as_posix(): entry
-                for entry in (root / "Data").rglob("*")
-                if entry.is_file() and entry.resolve() != destination.resolve()
+                name: entry
+                for name, entry in owned_assets(
+                    root, tree, reject_external=destination.suffix.lower() == ".twbx"
+                ).items()
+                if entry.resolve() != destination.resolve()
             }
             twb_name = self.twb_path.name
         entries[twb_name] = twb_source
@@ -254,11 +273,9 @@ class PackageManager:
                 if name.lower().endswith(".twb"):
                     continue
                 # XML references are relative to the selected TWB, not ZIP root.
-                relative = (
-                    asset.relative_to(self.twb_path.parent)
-                    if asset.is_relative_to(self.twb_path.parent)
-                    else Path(name)
-                )
+                from .assets import plain_asset_name
+
+                relative = Path(plain_asset_name(twb_name, name))
                 target = destination.parent / relative
                 if target in targets:
                     raise PackageError(

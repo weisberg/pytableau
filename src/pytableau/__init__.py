@@ -21,6 +21,14 @@ from pytableau.build import (
     quick_chart,
     quick_dashboard,
 )
+from pytableau.build.advanced import (
+    AxisSpec,
+    LogicalTable,
+    Pane,
+    RelationBuilder,
+    Relationship,
+    TableCalculation,
+)
 from pytableau.build.theme import Theme
 from pytableau.calculations import LintIssue
 from pytableau.constants import (
@@ -35,7 +43,14 @@ from pytableau.constants import (
     ValidationLevel,
 )
 from pytableau.core.formatting import Color, ColorPalette, Font, FormatSpec
+from pytableau.core.references import FieldReference, ReferenceGraph, ReferenceUse
 from pytableau.core.workbook import Workbook
+from pytableau.data.contracts import (
+    ColumnContract,
+    ExtractContract,
+    ExtractContractError,
+    TableIdentity,
+)
 from pytableau.exceptions import (
     AmbiguousWorkbookError,
     AuthenticationError,
@@ -75,6 +90,7 @@ from pytableau.fleet import (
     MigrationPlan,
     WorkbookScan,
 )
+from pytableau.fleet.journal import MigrationManifest
 from pytableau.governance import (
     GovernanceLintIssue,
     GovernanceRuleset,
@@ -83,8 +99,25 @@ from pytableau.governance import (
 )
 from pytableau.inspect.diff import Patch, WorkbookDiff
 from pytableau.package.assets import WorkbookAsset, add_asset, extract_asset, list_assets
+from pytableau.xml.semantic import Capability, CompatibilityReport
 
 __all__ = [
+    "AxisSpec",
+    "LogicalTable",
+    "Pane",
+    "RelationBuilder",
+    "Relationship",
+    "TableCalculation",
+    "FieldReference",
+    "ReferenceGraph",
+    "ReferenceUse",
+    "ColumnContract",
+    "ExtractContract",
+    "ExtractContractError",
+    "TableIdentity",
+    "MigrationManifest",
+    "Capability",
+    "CompatibilityReport",
     # Version
     "__version__",
     # Top-level exceptions

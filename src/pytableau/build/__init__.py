@@ -68,6 +68,12 @@ from pytableau.build.spec import from_spec
 from pytableau.build.worksheet import WorksheetBuilder
 
 __all__ = [
+    "AxisSpec",
+    "LogicalTable",
+    "Pane",
+    "RelationBuilder",
+    "Relationship",
+    "TableCalculation",
     "DatasourceBuilder",
     "WorksheetBuilder",
     "DashboardBuilder",
@@ -75,3 +81,5 @@ __all__ = [
     "quick_chart",
     "quick_dashboard",
 ]
+
+from .advanced import AxisSpec, LogicalTable, Pane, RelationBuilder, Relationship, TableCalculation

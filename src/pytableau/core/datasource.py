@@ -229,6 +229,8 @@ class Relation(XMLNodeProxy):
     @property
     def join_type(self) -> str | None:
         """Return the join type from a ``<clause type=...>`` or ``join`` attribute."""
+        if self.xml_node.get("join"):
+            return self.xml_node.get("join")
         clause = self.xml_node.find("clause")
         if clause is not None:
             return clause.get("type")
@@ -286,6 +288,15 @@ class MetadataRecord(XMLNodeProxy):
         return (node.text or "").strip() if node is not None else ""
 
     @property
+    def parent_name(self) -> str:
+        """Qualified table owning this metadata column."""
+        return self.xml_node.findtext("parent-name", "")
+
+    @property
+    def local_type(self) -> str:
+        return self.xml_node.findtext("local-type", "")
+
+    @property
     def aggregation(self) -> str:
         node = self.xml_node.find("aggregation")
         return (node.text or "").strip() if node is not None else ""
@@ -312,7 +323,11 @@ class Datasource(XMLNodeProxy):
         self.name: str = self.xml_node.get("name", "")
         self.caption: str = self.xml_node.get("caption", self.name)
         self.connections = [Connection(conn) for conn in self.xml_node.findall(".//connection")]
-        self.relations = [Relation(rel) for rel in self.xml_node.findall(".//relations/relation")]
+        self.relations = [
+            Relation(rel)
+            for rel in self.xml_node.findall(".//relations/relation")
+            + self.xml_node.findall("connection/relation")
+        ]
         self._fields = self._read_fields()
         self._calculated_fields = [f for f in self._fields if isinstance(f, CalculatedField)]
         self._parameters = [f for f in self._fields if isinstance(f, Parameter)]
@@ -337,9 +352,27 @@ class Datasource(XMLNodeProxy):
 
             self._hyper_bridge = HyperBridge(
                 self._hyper_path,
-                on_write=self._sync_extracted_metadata,
+                on_write=self._sync_current_extracted_metadata,
+                path_provider=self._current_extract_path,
             )
         return self._hyper_bridge
+
+    def _current_extract_source(self):
+        if self._workbook is None:
+            return self
+        source = self._workbook.datasources.get(self.name)
+        if source is None:
+            raise HyperError("The extract datasource is no longer attached to the workbook")
+        return source
+
+    def _current_extract_path(self) -> Path:
+        path = self._current_extract_source()._hyper_path
+        if path is None:
+            raise HyperError("No .hyper extract attached to this datasource")
+        return path
+
+    def _sync_current_extracted_metadata(self, df, table: str = "Extract") -> None:
+        self._current_extract_source()._sync_extracted_metadata(df, table)
 
     def _discover_hyper_path(self) -> Path | None:
         for connection in self.connections:
@@ -428,6 +461,46 @@ class Datasource(XMLNodeProxy):
     def is_parameters(self) -> bool:
         return self.name == "Parameters"
 
+    @property
+    def logical_tables(self) -> list[dict[str, str]]:
+        """Native logical table object identities and captions."""
+        return [
+            {"id": n.get("id", ""), "caption": n.get("caption", "")}
+            for n in self.xml_node.findall("object-graph/objects/object")
+        ]
+
+    @property
+    def relationships(self) -> list[dict[str, object]]:
+        """Logical relationship endpoints and lossless predicate XML."""
+        result = []
+        for node in self.xml_node.findall("object-graph/relationships/relationship"):
+            left, right = node.find("first-end-point"), node.find("second-end-point")
+            expression = node.find("expression")
+            result.append(
+                {
+                    "left": left.get("object-id") if left is not None else None,
+                    "right": right.get("object-id") if right is not None else None,
+                    "expression": etree.tostring(expression, encoding="unicode")
+                    if expression is not None
+                    else None,
+                }
+            )
+        return result
+
+    def write_extract(
+        self,
+        df,
+        contract,
+        *,
+        policy: str = "strict",
+        mode: str = "replace",
+        backfill: dict[str, object] | None = None,
+    ) -> None:
+        """Write typed data under an ExtractContract and commit matching XML metadata."""
+        self._extract_manager.write_contract(
+            self, df, contract, policy=policy, mode=mode, backfill=backfill
+        )
+
     def _read_fields(self) -> list[Field]:
         columns = self.xml_node.find("columns")
         if columns is None:
@@ -437,6 +510,22 @@ class Datasource(XMLNodeProxy):
             field = self._field_from_node(node)
             if field is not None:
                 fields.append(field)
+        # Physical columns can exist only in metadata; reading must not alter XML.
+        names = {f.name for f in fields}
+        for record in self.xml_node.findall(".//metadata-record[@class='column']"):
+            name = record.findtext("local-name")
+            if not name or name in names:
+                continue
+            datatype = record.findtext("local-type") or "string"
+            node = etree.Element(
+                "column",
+                name=name,
+                caption=_normalise_field_name(name),
+                datatype=datatype,
+                role="measure" if datatype in {"integer", "real"} else "dimension",
+            )
+            fields.append(Field(node, self))
+            names.add(name)
         return fields
 
     def _field_from_node(self, node: etree._Element) -> Field:
@@ -466,6 +555,9 @@ class Datasource(XMLNodeProxy):
         normal = _normalise_field_name(name)
         for field in self._fields:
             if field.caption == normal or _normalise_field_name(field.caption) == normal:
+                return field
+        for field in self._fields:
+            if _normalise_field_name(field.name) == normal:
                 return field
         return None
 
@@ -690,37 +782,32 @@ class Datasource(XMLNodeProxy):
                 f"Field '{name_or_field}' not found in datasource '{self.name}'.",
                 suggestion=_field_suggestion(str(name_or_field), self.field_names),
             )
+        if self._workbook is not None:
+            self._workbook.references().remove_usages(self.name, field.name)
         parent = field.xml_node.getparent()
         if parent is not None:
             parent.remove(field.xml_node)
+        for record in self.xml_node.findall(".//metadata-record"):
+            if record.findtext("local-name") == field.name:
+                record.getparent().remove(record)
+        self._metadata_records_cache = None
         self._sync_fields()
 
-        if self._workbook is not None:
-            target = field.caption
-            for worksheet in self._workbook.worksheets:
-                worksheet.remove_field_reference(target)
-            for dashboard in self._workbook.dashboards:
-                dashboard.remove_field_reference(target)
-            for datasource in self._workbook.datasources:
-                if datasource is self:
-                    continue
-                for calc in datasource.calculated_fields:
-                    formula = calc.formula
-                    if _contains_field_reference(formula, target):
-                        warnings.warn(
-                            f"Removing '{target}' may break calculated field '{calc.caption}' "
-                            f"in datasource '{datasource.name}'.",
-                            stacklevel=2,
-                        )
+    def rename_field(
+        self, old_caption: str, new_caption: str, *, rename_internal: bool = False
+    ) -> None:
+        """Rename a caption and its scoped uses; retain native internal IDs by default.
 
-    def rename_field(self, old_caption: str, new_caption: str) -> None:
+        Set ``rename_internal=True`` to change the field's internal identifier too.
+        References in formula literals/comments and unrelated datasources are retained.
+        """
         old_key = _normalise_field_label(old_caption)
         new_key = _normalise_field_label(new_caption)
         if old_key == new_key:
             return
-        if not old_key:
-            raise FieldNotFoundError("Old field caption cannot be empty.")
-        if self.get_field(new_caption) is not None:
+        if not old_key or not new_key:
+            raise FieldNotFoundError("Field captions cannot be empty.")
+        if any(_normalise_field_label(f.caption) == new_key for f in self.all_fields):
             raise DuplicateFieldError(
                 f"Field '{new_caption}' already exists in datasource '{self.name}'."
             )
@@ -730,46 +817,50 @@ class Datasource(XMLNodeProxy):
                 f"Field '{old_caption}' not found in datasource '{self.name}'.",
                 suggestion=_field_suggestion(old_caption, self.field_names),
             )
-
-        worksheets = []
-        actions = []
         if self._workbook is not None:
-            owners = {
-                ds.name
-                for ds in self._workbook.datasources
-                if ds.get_field(old_caption) is not None
-            }
-            for worksheet in self._workbook.worksheets:
-                dependencies = set(worksheet.datasource_dependencies)
-                relevant = dependencies & owners if dependencies else owners
-                if self.name not in relevant:
-                    continue
-                if len(relevant) > 1:
-                    xml = etree.tostring(worksheet.xml_node, encoding="unicode")
-                    if _contains_field_reference(xml, old_key):
-                        raise InvalidWorkbookError(
-                            f"Cannot safely rename '{old_caption}' in worksheet "
-                            f"'{worksheet.name}': multiple datasources define that field."
+            from pytableau.core.references import ReferenceGraph
+
+            try:
+                ReferenceGraph(self._workbook).rename(
+                    self.name, field.name, old_key, new_key, internal=rename_internal
+                )
+            except ValueError as exc:
+                raise InvalidWorkbookError(
+                    f"Cannot safely rename: multiple datasources or unresolved references: {exc}"
+                ) from exc
+        else:
+            from pytableau.core.references import reference_tokens
+
+            for calc in self.calculated_fields:
+                formula = calc.formula
+                for token in reversed(reference_tokens(formula, formula=True)):
+                    reference = token.reference
+                    internal = [
+                        f
+                        for f in self.all_fields
+                        if _normalise_field_name(f.name) == reference.name
+                    ]
+                    matches = internal or [
+                        f for f in self.all_fields if f.caption == reference.name
+                    ]
+                    if reference.datasource not in {None, self.name, self.caption}:
+                        continue
+                    if len(matches) == 1 and matches[0] is field and reference.name == old_key:
+                        formula = (
+                            formula[: token.start]
+                            + str(token.reference.with_name(new_key))
+                            + formula[token.end :]
                         )
-                    continue
-                worksheets.append(worksheet)
-            affected_names = {worksheet.name for worksheet in worksheets}
-            for dashboard in self._workbook.dashboards:
-                for action in dashboard.actions:
-                    sheet = action.source_sheet or action.target_sheet
-                    if sheet in affected_names or (sheet is None and owners == {self.name}):
-                        actions.append(action)
+                calc.formula = formula
+        field.caption = new_key
+        if rename_internal:
+            from pytableau.core.references import FieldReference
 
-        field.caption = new_caption
+            field.xml_node.set("name", str(FieldReference(new_key)))
         self._sync_fields()
-
-        for calc in self.calculated_fields:
-            calc.formula = _rename_formula(calc.formula, old_key, new_key)
         if self._workbook is not None:
-            for worksheet in worksheets:
-                worksheet.rename_field_reference(old_key, new_key)
-            for action in actions:
-                action.replace_field_reference(old_key, new_key)
+            for worksheet in self._workbook.worksheets:
+                worksheet._refresh_references()
 
     # ------------------------------------------------------------------
     # .tds / .tdsx standalone open/save (#65)

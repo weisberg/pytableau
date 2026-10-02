@@ -97,6 +97,7 @@ class MigrationPlan:
         self._connection_swaps: dict[str, str] = {}
         self._field_renames: dict[str, str] = {}
         self._validate: bool = False
+        self._allow_unverified: bool = False
 
     def source_directory(self, path: str | Path) -> MigrationPlan:
         """Set the source directory to scan for workbooks."""
@@ -113,11 +114,12 @@ class MigrationPlan:
         self._pattern = glob
         return self
 
-    def target_version(self, version: str) -> MigrationPlan:
+    def target_version(self, version: str, *, allow_unverified: bool = False) -> MigrationPlan:
         """Pin the ``source-build`` attribute to a known Tableau version string."""
         if version not in TABLEAU_VERSION_MAP:
             raise ValueError(f"Unsupported Tableau version: {version}")
         self._target_version = version
+        self._allow_unverified = allow_unverified
         return self
 
     def swap_connections(self, mapping: dict[str, str]) -> MigrationPlan:
@@ -141,6 +143,12 @@ class MigrationEngine:
 
     def __init__(self, plan: MigrationPlan) -> None:
         self._plan = plan
+
+    def prepare(self, directory: str | Path) -> Any:
+        """Persist a reviewable plan with exact outputs and a recovery journal."""
+        from .journal import prepare
+
+        return prepare(self, directory)
 
     def execute(self, *, dry_run: bool = False) -> MigrationReport:
         """Run the migration.
@@ -182,7 +190,7 @@ class MigrationEngine:
 
             if plan._target_version is not None and wb.version != plan._target_version:
                 old_version = wb.version
-                wb.migrate_version(plan._target_version)
+                wb.migrate_version(plan._target_version, allow_unverified=plan._allow_unverified)
                 changes.append(f"target_version: {old_version!r} → {plan._target_version!r}")
 
             # Connection swaps

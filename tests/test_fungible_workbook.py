@@ -177,6 +177,7 @@ def test_version_migrate_2023_1():
         "version_migrate",
         workbook=FUNGIBLE,
         target_version="2023.1",
+        allow_unverified=True,
     )
     assert result.ok, f"version_migrate failed: {result.error}"
 
@@ -193,7 +194,7 @@ def test_version_migrate_source_build_attribute():
     from pytableau.package.manager import PackageManager
 
     wb = Workbook.open(FUNGIBLE)
-    wb.migrate_version("2023.1")
+    wb.migrate_version("2023.1", allow_unverified=True)
     wb.save()
     wb.close()
 
@@ -206,22 +207,22 @@ def test_version_migrate_source_build_attribute():
 
 
 def test_version_migrate_then_back():
-    """Migrating 2024.1 → 2022.4 → 2024.1 round-trips correctly."""
+    """Migrating 2025.3 → 2022.4 → 2025.3 round-trips correctly."""
     wb = Workbook.open(FUNGIBLE)
-    assert wb.version == "2024.1"
+    assert wb.version == "2025.3"
 
-    wb.migrate_version("2022.4")
+    wb.migrate_version("2022.4", allow_unverified=True)
     wb.save()
     wb.close()
 
     wb2 = Workbook.open(FUNGIBLE)
     assert wb2.version == "2022.4"
-    wb2.migrate_version("2024.1")
+    wb2.migrate_version("2025.3")
     wb2.save()
     wb2.close()
 
     wb3 = Workbook.open(FUNGIBLE)
-    assert wb3.version == "2024.1"
+    assert wb3.version == "2025.3"
     wb3.close()
 
 
@@ -374,7 +375,7 @@ def test_sequential_mutations_all_persist():
 
     # Mutation 2: version migrate
     wb = Workbook.open(FUNGIBLE)
-    wb.migrate_version("2023.1")
+    wb.migrate_version("2023.1", allow_unverified=True)
     wb.save()
     wb.close()
 
@@ -439,7 +440,7 @@ def test_version_migrate_preserves_datasource():
     wb_before.close()
 
     wb = Workbook.open(FUNGIBLE)
-    wb.migrate_version("2022.4")
+    wb.migrate_version("2022.4", allow_unverified=True)
     wb.save()
     wb.close()
 
@@ -473,7 +474,7 @@ def test_validate_after_mutation_still_clean():
     """Validation finds no errors after a version migrate + field add."""
     wb = Workbook.open(FUNGIBLE)
     ds = list(wb.datasources)[0]
-    wb.migrate_version("2023.1")
+    wb.migrate_version("2023.1", allow_unverified=True)
     ds.add_calculated_field(
         caption="Test | Canary 2",
         formula="[GF] - [GA]",

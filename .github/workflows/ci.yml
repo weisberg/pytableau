@@ -74,3 +74,23 @@ jobs:
 
       - name: Exercise real Hyper operations
         run: pytest -m requires_hyper
+
+  package:
+    name: Docs, build and installed-wheel example (Python 3.11)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install documentation and build tools
+        run: pip install build mkdocs 'mkdocstrings[python]' -e '.[dev]'
+      - name: Strict documentation build
+        run: mkdocs build --strict
+      - name: Build distribution
+        run: python -m build
+      - name: Exercise core workflow from installed wheel without extras
+        run: |
+          python -m venv /tmp/pytableau-wheel
+          /tmp/pytableau-wheel/bin/pip install dist/pytableau-*.whl
+          /tmp/pytableau-wheel/bin/python examples/12_workbook_engineering.py --output /tmp/pytableau-example

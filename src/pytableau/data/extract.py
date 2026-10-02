@@ -26,6 +26,137 @@ class ExtractManager:
     def _metadata_name(self, datasource) -> str:
         return f"{datasource._connection_safe_name()}.hyper"
 
+    def write_contract(self, datasource, df, contract, **options) -> None:
+        """Validate data, schema and proposed XML before installing a typed extract."""
+        import copy
+
+        from pytableau.core.datasource import Connection, Datasource
+        from pytableau.exceptions import SchemaValidationError
+        from pytableau.xml.semantic import version_key
+
+        if any(
+            c.datatype == "decimal" and c.precision > 18 for c in contract.columns
+        ) and version_key(datasource._workbook.version) < version_key("2023.1"):
+            raise SchemaValidationError(
+                "128-bit decimal extracts require Tableau 2023.1 or later for Server compatibility"
+            )
+        path = self._resolve_hyper_path(datasource)
+        original = copy.deepcopy(datasource.xml_node)
+        old_columns = set()
+        if path.exists():
+            bridge = HyperBridge(path)
+            if contract.table in bridge.table_identities():
+                old_columns = {column["name"] for column in bridge.schema(contract.table)}
+
+        def prepare_metadata(schema):
+            node = copy.deepcopy(original)
+            metadata = node.find("metadata-records")
+            if metadata is None:
+                metadata = etree.SubElement(node, "metadata-records")
+            table = f"[{contract.table.schema}].[{contract.table.name}]"
+            dropped = old_columns - {column["name"] for column in schema}
+            for field in node.findall("column") + node.findall("columns/column"):
+                if field.get("name", "")[1:-1] in dropped and field.find("calculation") is None:
+                    field.getparent().remove(field)
+            for record in list(metadata):
+                if record.findtext("parent-name") in {table, f"[{contract.table.name}]"}:
+                    metadata.remove(record)
+            for index, column in enumerate(schema, 1):
+                record = etree.SubElement(metadata, "metadata-record", attrib={"class": "column"})
+                for tag, value in {
+                    "remote-name": column["name"],
+                    "local-name": f"[{column['name']}]",
+                    "parent-name": table,
+                    "local-type": "real" if column["datatype"] == "decimal" else column["datatype"],
+                    "ordinal": str(index),
+                    "contains-null": str(column["nullable"]).lower(),
+                }.items():
+                    etree.SubElement(record, tag).text = value
+            connection = node.find("extract/connection")
+            if connection is None:
+                live = node.find("connection")
+                if live is None or live.get("class") == "hyper":
+                    connection = live if live is not None else etree.SubElement(node, "connection")
+                else:
+                    extract = node.find("extract")
+                    if extract is None:
+                        extract = etree.SubElement(node, "extract")
+                    connection = etree.SubElement(extract, "connection")
+            connection.set("class", "hyper")
+            wb = datasource._workbook
+            root = wb._package_manager.twb_path.parent if wb._package_manager else wb._path.parent
+            relative = path.resolve().relative_to(root.resolve()).as_posix()
+            connection.set("dbname", relative)
+            connection.set("filename", relative)
+            physical = connection.find("relation")
+            if physical is None:
+                physical = etree.SubElement(
+                    connection, "relation", type="table", name=contract.table.name
+                )
+            if physical.get("type") != "table":
+                matches = physical.findall(f".//relation[@table='{table}']")
+                if len(matches) != 1:
+                    raise SchemaValidationError(
+                        "Cannot identify contract table in multi-table extract relation"
+                    )
+                physical = matches[0]
+            physical.set("table", table)
+            # Refresh explicit physical column metadata to match the typed schema.
+            for column in schema:
+                field = next(
+                    (n for n in node.findall("column") if n.get("name") == f"[{column['name']}]"),
+                    None,
+                )
+                container = node.find("columns")
+                if field is None and container is not None:
+                    field = next(
+                        (n for n in container if n.get("name") == f"[{column['name']}]"), None
+                    )
+                if field is not None:
+                    field.set(
+                        "datatype",
+                        "real" if column["datatype"] == "decimal" else column["datatype"],
+                    )
+            from pytableau.core.workbook import Workbook
+
+            tree = copy.deepcopy(wb.xml_tree)
+            match = next(
+                n
+                for n in tree.getroot().findall(".//datasource")
+                if n.get("name") == datasource.name
+            )
+            match.getparent().replace(match, copy.deepcopy(node))
+            proposed = Workbook()
+            proposed._load_tree(tree)
+            errors = [i for i in proposed.validate() if i.level == "error"]
+            if errors:
+                raise SchemaValidationError(f"Invalid proposed extract metadata: {errors[0]}")
+            # Parse the complete proposal now so commit has no parsing/validation work.
+            proposal = Datasource(node, datasource._workbook)
+
+            def commit():
+                try:
+                    datasource.xml_node.attrib.clear()
+                    datasource.xml_node.attrib.update(node.attrib)
+                    datasource.xml_node[:] = list(node)
+                    datasource._sync_fields()
+                    datasource.connections = [
+                        Connection(c) for c in datasource.xml_node.findall(".//connection")
+                    ]
+                    datasource._metadata_records_cache = None
+                    datasource._set_hyper_path(path)
+                except BaseException:
+                    datasource.xml_node.attrib.clear()
+                    datasource.xml_node.attrib.update(original.attrib)
+                    datasource.xml_node[:] = list(original)
+                    datasource._sync_fields()
+                    raise
+
+            _ = proposal
+            return commit
+
+        contract.write(path, df, prepare_metadata=prepare_metadata, **options)
+
     def create(self, datasource, df, table: str = "Extract") -> None:
         """Create a new extract for ``datasource`` and attach it in XML."""
         base = self._resolve_base_dir(datasource)

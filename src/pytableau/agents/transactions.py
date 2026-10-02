@@ -1,8 +1,9 @@
-"""Atomic multi-step workbook mutations with XML rollback.
+"""Isolated XML and asset mutations with rollback.
 
-A :class:`WorkbookTransaction` captures a deep copy of the workbook's XML
-tree on entry and restores it if any exception propagates through the ``with``
-block, leaving the workbook completely unchanged.
+A :class:`WorkbookTransaction` captures XML and owned assets on entry.
+Workbook-managed extract handles resolve against isolated storage. Exceptions
+restore the snapshot; successful changes remain staged until an explicit save.
+Raw independent file/SQL handles are outside this transaction boundary.
 
 Example::
 
@@ -15,10 +16,7 @@ Example::
 
 from __future__ import annotations
 
-import copy
 from typing import TYPE_CHECKING, Any
-
-from lxml import etree
 
 if TYPE_CHECKING:
     from pytableau.core.workbook import Workbook
@@ -36,11 +34,50 @@ class WorkbookTransaction:
 
     def __init__(self, workbook: Workbook) -> None:
         self._workbook = workbook
-        self._snapshot: etree._ElementTree | None = None
 
     def __enter__(self) -> WorkbookTransaction:
-        root_copy = copy.deepcopy(self._workbook.xml_root)
-        self._snapshot = etree.ElementTree(root_copy)
+        from pytableau.core.state import install, snapshot
+        from pytableau.exceptions import InvalidPathError
+
+        wb = self._workbook
+        pm = wb._package_manager
+        root = pm.twb_path.parent if pm else (wb._path.parent if wb._path else None)
+        original_tree = wb.xml_tree
+        original_sources = list(wb.datasources)
+        for ds in original_sources:
+            if (
+                root
+                and ds._hyper_path
+                and not ds._hyper_path.resolve().is_relative_to(root.resolve())
+            ):
+                raise InvalidPathError(
+                    "Transaction extract is outside the captured asset directory"
+                )
+        self._state = snapshot(wb)
+        from pathlib import Path
+
+        for ds in original_sources:
+            if ds._hyper_path is None:
+                continue
+            if (
+                root is None
+                or ds._hyper_path.relative_to(root).as_posix() not in self._state["assets"]
+            ):
+                raise InvalidPathError("Transaction extract is not captured as an owned asset")
+            for connection in ds.connections:
+                for attr in ("filename", "dbname"):
+                    value = connection.xml_node.get(attr)
+                    if value and Path(value).is_absolute():
+                        raise InvalidPathError("Transactions require relative extract references")
+        install(wb, self._state)
+        # Keep existing field/datasource handles attached to the same XML nodes,
+        # while redirecting their data writes into isolated package storage.
+        wb._load_tree(original_tree)
+        for ds in original_sources:
+            fresh = wb.datasources.get(ds.name)
+            if fresh is not None:
+                ds._set_hyper_path(fresh._hyper_path)
+        wb._transaction_depth += 1
         return self
 
     def __exit__(
@@ -49,9 +86,11 @@ class WorkbookTransaction:
         exc_val: BaseException | None,
         exc_tb: object,
     ) -> None:
-        if exc_type is not None and self._snapshot is not None:
-            # Rollback to the snapshot taken on __enter__
-            self._workbook._load_tree(self._snapshot)
+        self._workbook._transaction_depth -= 1
+        if exc_type is not None:
+            from pytableau.core.state import install
+
+            install(self._workbook, self._state, restore_tombstones=True)
 
     # ------------------------------------------------------------------
     # Delegation helpers — keep parity with common Datasource mutations

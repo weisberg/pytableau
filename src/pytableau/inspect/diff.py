@@ -65,10 +65,17 @@ class WorkbookDiff:
     dashboards_added: list[str] = field(default_factory=list)
     dashboards_removed: list[str] = field(default_factory=list)
 
+    components_modified: dict[str, list[str]] = field(default_factory=dict)
+    assets_modified: list[str] = field(default_factory=list)
+    before_state: dict[str, Any] | None = field(default=None, repr=False)
+    after_state: dict[str, Any] | None = field(default=None, repr=False)
+
     def is_empty(self) -> bool:
         """Return ``True`` if there are no changes."""
         return (
-            not self.datasources_added
+            not self.components_modified
+            and not self.assets_modified
+            and not self.datasources_added
             and not self.datasources_removed
             and not self.datasources_modified
             and not self.worksheets_added
@@ -81,6 +88,8 @@ class WorkbookDiff:
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a JSON-compatible dictionary."""
         return {
+            "components_modified": self.components_modified,
+            "assets_modified": self.assets_modified,
             "before_version": self.before_version,
             "after_version": self.after_version,
             "datasources_added": self.datasources_added,
@@ -136,6 +145,9 @@ class WorkbookDiff:
             lines.append(f"+ dashboard: {name}")
         for name in self.dashboards_removed:
             lines.append(f"- dashboard: {name}")
+        for category, names in self.components_modified.items():
+            lines.extend(f"~ {category}: {name}" for name in names)
+        lines.extend(f"~ asset: {name}" for name in self.assets_modified)
         if not lines:
             return "(no changes)"
         return "\n".join(lines)
@@ -185,6 +197,9 @@ class WorkbookDiff:
         for name in self.dashboards_removed:
             rows.append(_row("-", "dashboard", name, "#ffebee"))
 
+        for category, names in self.components_modified.items():
+            rows.extend(_row("~", category, name, "#fff3e0") for name in names)
+        rows.extend(_row("~", "asset", name, "#fff3e0") for name in self.assets_modified)
         if not rows:
             return "<p><em>(no changes)</em></p>"
 
@@ -247,6 +262,9 @@ class WorkbookDiff:
         for name in self.dashboards_removed:
             sections["Removed"].append(f"Dashboard `{name}`")
 
+        for category, names in self.components_modified.items():
+            sections["Changed"].extend(f"{category} `{name}`" for name in names)
+        sections["Changed"].extend(f"Asset `{name}`" for name in self.assets_modified)
         if not any(sections.values()):
             return header + "\n_No changes._\n"
 
@@ -298,6 +316,40 @@ def diff_workbooks(before: Workbook, after: Workbook) -> WorkbookDiff:
     diff.dashboards_added = sorted(after_db - before_db)
     diff.dashboards_removed = sorted(before_db - after_db)
 
+    from lxml import etree
+
+    from pytableau.core.state import snapshot, xml_identity
+
+    diff.before_state, diff.after_state = snapshot(before), snapshot(after)
+    for tag in ("datasource", "worksheet", "dashboard", "window", "style", "actions"):
+
+        def index(wb: Workbook, tag: str = tag) -> dict[str, bytes]:
+            container = wb.xml_root.find(tag + "s")
+            nodes = list(container) if container is not None else wb.xml_root.findall(tag)
+            return {
+                n.get("name", str(i)): xml_identity(etree.tostring(n))
+                for i, n in enumerate(nodes)
+                if isinstance(n.tag, str)
+            }
+
+        left, right = index(before), index(after)
+        changed = sorted(k for k in left.keys() & right.keys() if left[k] != right[k])
+        if changed:
+            diff.components_modified[tag] = changed
+    if xml_identity(diff.before_state["xml"]) != xml_identity(diff.after_state["xml"]):
+        # Full document coverage includes unknown extensions, parameters and root attributes.
+        diff.components_modified["document"] = ["workbook"]
+    left_assets, right_assets = diff.before_state["assets"], diff.after_state["assets"]
+    if (diff.before_state["member"], diff.before_state["packaged"]) != (
+        diff.after_state["member"],
+        diff.after_state["packaged"],
+    ):
+        diff.components_modified["package"] = ["layout"]
+    diff.assets_modified = sorted(
+        k
+        for k in left_assets.keys() | right_assets.keys()
+        if left_assets.get(k) != right_assets.get(k)
+    )
     return diff
 
 
@@ -417,6 +469,22 @@ class Patch:
     @classmethod
     def from_diff(cls, diff: WorkbookDiff) -> Patch:
         """Convert a :class:`WorkbookDiff` into a :class:`Patch`."""
+        if diff.before_state is not None and diff.after_state is not None:
+            from pytableau.core.state import fingerprint
+
+            return cls(
+                []
+                if diff.is_empty()
+                else [
+                    PatchOp(
+                        "replace_snapshot",
+                        "workbook",
+                        None,
+                        fingerprint(diff.before_state),
+                        diff.after_state,
+                    )
+                ]
+            )
         ops: list[PatchOp] = []
 
         if diff.before_version != diff.after_version:
@@ -542,26 +610,35 @@ def apply_patch(workbook: Workbook, patch: Patch, *, validate: bool = True) -> i
     Unknown or missing targets are skipped with a warning. Returns the
     number of ops successfully applied.
     """
+    from pytableau.core.state import fingerprint, install, snapshot
+
+    original = snapshot(workbook)
     applied = 0
+    try:
+        for op in patch.ops:
+            if op.action == "replace_snapshot":
+                if fingerprint(snapshot(workbook)) != op.old_value:
+                    raise ValueError("Patch conflict: workbook XML or assets changed")
+                install(workbook, op.new_value)
+                applied += 1
+            else:
+                try:
+                    prior = fingerprint(snapshot(workbook))
+                    _apply_op(workbook, op)
+                    applied += int(fingerprint(snapshot(workbook)) != prior)
+                except (KeyError, AttributeError) as exc:
+                    warnings.warn(
+                        f"Patch op skipped (target not found): {op.target!r} — {exc}", stacklevel=2
+                    )
+        if validate:
+            errors = [i for i in workbook.validate() if i.level == "error"]
+            if errors:
+                from pytableau.exceptions import SchemaValidationError
 
-    for op in patch.ops:
-        try:
-            _apply_op(workbook, op)
-            applied += 1
-        except (KeyError, AttributeError, ValueError) as exc:
-            warnings.warn(
-                f"Patch op skipped (target not found): {op.target!r} — {exc}",
-                stacklevel=2,
-            )
-
-    if validate:
-        issues = workbook._validate_for_save()
-        errors = [i for i in issues if i.level == "error"]
-        if errors:
-            from pytableau.exceptions import SchemaValidationError
-
-            raise SchemaValidationError(f"Workbook is invalid after patch: {errors[0]}")
-
+                raise SchemaValidationError(f"Workbook is invalid after patch: {errors[0]}")
+    except BaseException:
+        install(workbook, original, restore_tombstones=True)
+        raise
     return applied
 
 
@@ -575,12 +652,22 @@ def _apply_op(workbook: Workbook, op: PatchOp) -> None:
             ds = workbook.datasources[ds_name]
             conn_idx = int(parts.get("connection", "0"))
             conn = ds.connections[conn_idx]
-            if op.attribute and op.new_value is not None:
-                setattr(conn, op.attribute if op.attribute != "class" else "class_", op.new_value)
+            if op.attribute is None:
+                raise ValueError("Connection edits require an attribute")
+            attribute = op.attribute if op.attribute != "class" else "class_"
+            if attribute not in {"class_", "server", "dbname", "username", "port"}:
+                raise ValueError(f"Unsupported connection attribute: {attribute}")
+            if op.old_value is not None and str(getattr(conn, attribute)) != str(op.old_value):
+                raise ValueError(f"Patch conflict: {op.target}.{attribute}")
+            setattr(conn, op.attribute if op.attribute != "class" else "class_", op.new_value)
+        else:
+            raise ValueError("Connection patch requires a datasource")
         return
 
     if action == PatchAction.MODIFY_FIELD:
         if op.target == "workbook" and op.attribute == "version":
+            if op.old_value is not None and str(op.old_value) != workbook.version:
+                raise ValueError("Patch conflict: workbook.version")
             if op.new_value:
                 workbook.migrate_version(str(op.new_value))
             return
@@ -592,13 +679,22 @@ def _apply_op(workbook: Workbook, op: PatchOp) -> None:
             if f is None:
                 raise KeyError(f"Field {field_caption!r} not found in datasource {ds_name!r}")
             attr = op.attribute
+            if op.old_value is not None and str(getattr(f, attr or "")) != str(op.old_value):
+                raise ValueError(f"Patch conflict: {op.target}.{attr}")
             if attr == "formula":
                 from pytableau.core.fields import CalculatedField
 
-                if isinstance(f, CalculatedField) and op.new_value is not None:
-                    f.formula = str(op.new_value)
-            elif attr in ("hidden",):
-                setattr(f, attr, bool(op.new_value))
+                if not isinstance(f, CalculatedField):
+                    raise ValueError("Formula edits require a calculated field")
+                f.formula = str(op.new_value or "")
+            elif attr == "hidden":
+                f.hidden = str(op.new_value).lower() in {"true", "1", "yes"}
+            elif attr in {"datatype", "role", "caption"}:
+                setattr(f, attr, op.new_value)
+            else:
+                raise ValueError(f"Unsupported field attribute: {attr}")
+        else:
+            raise ValueError("Field patch requires a datasource and field")
         return
 
     if action in (
@@ -611,6 +707,57 @@ def _apply_op(workbook: Workbook, op: PatchOp) -> None:
         PatchAction.ADD_FIELD,
         PatchAction.REMOVE_FIELD,
     ):
-        # Structural adds/removes require full node data which patches don't carry.
-        # Silently skip — these are informational ops from from_diff().
+        from lxml import etree
+
+        tags = {"datasource": "datasources", "worksheet": "worksheets", "dashboard": "dashboards"}
+        tag = next((t for t in ("field", *tags) if t in parts), None)
+        if tag is None:
+            raise ValueError(f"Invalid structural target: {op.target}")
+        parent: Any
+        if tag == "field":
+            parent = workbook.datasources[parts["datasource"]].xml_node
+            columns = parent.find("columns")
+            if columns is not None:
+                parent = columns
+            xml_tag = "column"
+        else:
+            parent = workbook.xml_root.find(tags[tag])
+            if parent is None:
+                parent = etree.SubElement(workbook.xml_root, tags[tag])
+            xml_tag = tag
+        found = [
+            n for n in parent.findall(xml_tag) if parts[tag] in {n.get("name"), n.get("caption")}
+        ]
+        if str(action).startswith("remove_"):
+            if len(found) != 1:
+                raise KeyError(op.target)
+            if op.old_value is not None:
+                from pytableau.core.state import xml_identity
+
+                if not isinstance(op.old_value, str) or xml_identity(op.old_value) != xml_identity(
+                    etree.tostring(found[0], with_tail=False)
+                ):
+                    raise ValueError(f"Patch conflict: {op.target}")
+            parent.remove(found[0])
+        else:
+            if found:
+                raise ValueError(f"Target already exists: {op.target}")
+            if not isinstance(op.new_value, str) or not op.new_value.lstrip().startswith("<"):
+                raise ValueError("Structural additions require complete XML payloads")
+            node = etree.fromstring(
+                op.new_value.encode(), etree.XMLParser(resolve_entities=False, no_network=True)
+            )
+            if node.tag != xml_tag:
+                raise ValueError(f"Expected <{xml_tag}> payload")
+            names = {node.get("name"), node.get("caption")}
+            payload_name = node.get("name")
+            if tag == "field" and payload_name:
+                names.add(payload_name[1:-1])
+            if parts[tag] not in names:
+                raise ValueError("Structural payload identity differs from patch target")
+            if any(n.get("name") == node.get("name") for n in parent.findall(xml_tag)):
+                raise ValueError("Structural payload duplicates an existing identity")
+            parent.append(node)
+        workbook._load_tree(workbook.xml_tree)
         return
+    raise ValueError(f"Unknown patch action: {action}")

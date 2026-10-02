@@ -373,7 +373,7 @@ def test_plain_migration_copies_extract_assets(tmp_path, minimal_twb):
         MigrationPlan()
         .source_directory(source.parent)
         .output_directory(output)
-        .target_version("2024.1")
+        .target_version("2024.1", allow_unverified=True)
     )
     report = MigrationEngine(plan).execute()
     assert report.migrated == 1

@@ -142,6 +142,27 @@ def _build_datasource(ds_spec: dict[str, Any]) -> DatasourceBuilder:
             role=_resolve_role(calc.get("role", "measure")),
         )
 
+    for connection in ds_spec.get("named_connections", []):
+        builder.named_connection(
+            connection["name"],
+            connection["class"],
+            **{k: str(v) for k, v in connection.items() if k not in {"name", "class"}},
+        )
+    from .advanced import LogicalTable, RelationBuilder, Relationship
+
+    if "relation" in ds_spec:
+        builder.relation(RelationBuilder.from_dict(ds_spec["relation"]))
+    if "logical_tables" in ds_spec:
+        builder.logical_model(
+            [
+                LogicalTable(t["id"], t["caption"], RelationBuilder.from_dict(t["relation"]))
+                for t in ds_spec["logical_tables"]
+            ],
+            [
+                Relationship(r["left"], r["right"], tuple(tuple(k) for k in r["keys"]))
+                for r in ds_spec.get("relationships", [])
+            ],
+        )
     return builder
 
 
@@ -207,6 +228,37 @@ def _build_worksheet(ws_spec: dict[str, Any], ds_internal_name: str | None) -> W
     if title:
         builder.title(str(title))
 
+    from pytableau.core.formatting import FormatSpec
+
+    from .advanced import Pane, TableCalculation
+
+    if "dual_axis" in ws_spec:
+        builder.dual_axis(**ws_spec["dual_axis"])
+    if "panes" in ws_spec:
+        builder.panes(
+            *(
+                Pane(
+                    p.get("mark_type", "Bar"),
+                    p.get("axis"),
+                    {k: tuple(v) for k, v in p.get("encodings", {}).items()},
+                )
+                for p in ws_spec["panes"]
+            )
+        )
+    for calc in ws_spec.get("table_calculations", []):
+        builder.table_calculation(
+            TableCalculation(
+                **{
+                    **calc,
+                    "addressing": tuple(calc.get("addressing", ())),
+                    "partitioning": tuple(calc.get("partitioning", ())),
+                }
+            )
+        )
+    for name, attributes in ws_spec.get("field_definitions", {}).items():
+        builder.field_definition(name, **attributes)
+    if "format" in ws_spec:
+        builder.format(FormatSpec.from_dict(ws_spec["format"]))
     return builder
 
 
@@ -337,18 +389,14 @@ def from_spec(spec: str | Path | dict[str, Any]) -> Any:
         caption = ds_spec.get("caption") or ds_spec.get("name", "Data")
         ds_caption_to_name[caption] = builder.name
 
+    wb._load_tree(wb.xml_tree)
+
     # Phase 2: worksheets
     for ws_spec in data.get("worksheets", []):
         ds_caption = ws_spec.get("datasource")
         ds_internal = ds_caption_to_name.get(ds_caption, ds_caption) if ds_caption else None
         ws_builder = _build_worksheet(ws_spec, ds_internal)
-        node = ws_builder.build()
-        container = wb.xml_root.find("worksheets")
-        if container is None:
-            from lxml import etree
-
-            container = etree.SubElement(wb.xml_root, "worksheets")
-        container.append(node)
+        wb.add_worksheet(ws_builder)
 
     # Phase 3: dashboards
     for dash_spec in data.get("dashboards", []):

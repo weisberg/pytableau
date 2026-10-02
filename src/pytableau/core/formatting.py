@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import Any
 
 
 @dataclass(frozen=True)
@@ -108,6 +109,77 @@ class FormatSpec:
     font: Font | None = None
     text_color: Color | None = None
     background_color: Color | None = None
+
+    @classmethod
+    def from_dict(cls, spec: dict[str, Any]) -> FormatSpec:
+        """Parse a JSON/YAML formatting specification."""
+        return cls(
+            Font(**spec["font"]) if spec.get("font") else None,
+            Color.from_hex(spec["text_color"]) if spec.get("text_color") else None,
+            Color.from_hex(spec["background_color"]) if spec.get("background_color") else None,
+        )
+
+    def apply(self, target: Any, *, element: str = "worksheet") -> None:
+        """Merge native style-rule/format values without discarding other styling."""
+        from lxml import etree
+
+        node = target.xml_node if hasattr(target, "xml_node") else target
+        if node.tag == "worksheet" and node.find("table") is not None:
+            node = node.find("table")
+        style = node.find("style")
+        if style is None:
+            style = etree.SubElement(node, "style")
+            if node.tag == "table":
+                node.remove(style)
+                node.insert(1, style)
+        rules = [n for n in style.findall("style-rule") if n.get("element") == element]
+        rule = rules[0] if rules else etree.SubElement(style, "style-rule", element=element)
+        attributes = {}
+        if self.font:
+            attributes.update(
+                {
+                    "font-family": self.font.family,
+                    "font-size": str(self.font.size),
+                    "font-weight": "bold" if self.font.bold else "normal",
+                    "font-style": "italic" if self.font.italic else "normal",
+                    "text-decoration": "underline" if self.font.underline else "none",
+                }
+            )
+        if self.text_color:
+            attributes["color"] = self.text_color.to_hex()
+        if self.background_color:
+            attributes["background-color"] = self.background_color.to_hex()
+        for attribute, value in attributes.items():
+            formats = [n for n in rule.findall("format") if n.get("attr") == attribute]
+            node = formats[0] if formats else etree.SubElement(rule, "format", attr=attribute)
+            node.set("value", value)
+
+    @classmethod
+    def read(cls, target: Any, *, element: str = "worksheet") -> FormatSpec:
+        """Read the native style rule written by apply, leaving unknown settings intact."""
+        node = target.xml_node if hasattr(target, "xml_node") else target
+        if node.tag == "worksheet" and node.find("table") is not None:
+            node = node.find("table")
+        values = {
+            n.get("attr"): n.get("value")
+            for r in node.findall("style/style-rule")
+            if r.get("element") == element
+            for n in r.findall("format")
+        }
+        font = None
+        if any(k.startswith("font-") for k in values):
+            font = Font(
+                values.get("font-family", "Tableau Book"),
+                int(values.get("font-size", "10")),
+                values.get("font-weight") == "bold",
+                values.get("font-style") == "italic",
+                values.get("text-decoration") == "underline",
+            )
+        return cls(
+            font,
+            Color.from_hex(values["color"]) if "color" in values else None,
+            Color.from_hex(values["background-color"]) if "background-color" in values else None,
+        )
 
     def to_dict(self) -> dict[str, object]:
         """Serialise to a JSON-compatible dictionary."""

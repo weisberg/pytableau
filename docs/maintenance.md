@@ -74,8 +74,11 @@ extra disk space proportional to the extract size and assume a single writer;
 concurrent updates to one extract are not coordinated. Empty bulk replacement
 clears old rows, and nonpositive batch sizes raise `ValueError`.
 
-Workbook transactions restore XML only. They do not roll back successful Hyper
-file operations or files saved from inside the transaction.
+In 3.0, workbook transactions isolate XML and owned asset changes. Hyper writes remain
+in working storage until `save()` after commit; exceptions restore the snapshot.
+Saving inside a transaction and uncaptured external extract writes are rejected.
+Use durable migration manifests for file installation and recovery. See the
+[engineering guide](engineering.md).
 
 ## Verification scope
 
