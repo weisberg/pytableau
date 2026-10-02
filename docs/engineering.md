@@ -1,8 +1,8 @@
 # Workbook engineering in 3.0
 
 These APIs implement complete patches, scoped references, semantic checks, recoverable
-fleet migrations, typed extracts, and advanced authoring. Version 3.0 is unreleased;
-install this development checkout to use them. Core workflows require only `lxml`.
+fleet migrations, typed extracts, and advanced authoring. Install version 3.0 with
+`pip install 'pytableau==3.0.0'`. Core workflows require only `lxml`.
 Extract contracts require `pip install 'pytableau[hyper]'`.
 
 ## Changes when upgrading from 2.x

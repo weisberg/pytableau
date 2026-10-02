@@ -10,19 +10,20 @@
 
 ---
 
-## 3.0 workbook engineering (unreleased)
+## 3.0 workbook engineering
 
-The development branch adds complete XML and asset patches, scoped reference impact analysis,
+Version 3.0 adds complete XML and asset patches, scoped reference impact analysis,
 semantic validation and conservative compatibility checks, durable migration journals,
 typed extract contracts, and native joins, relationships, dual axes and table calculations.
 See the [engineering guide](docs/engineering.md) and runnable
 [example](examples/12_workbook_engineering.py).
 
-Upgrading changes three behaviors: unverified downgrades require an explicit override;
+Upgrading changes four behaviors: unverified downgrades require an explicit override;
 workbook transactions stage extract changes until a subsequent save and reject saves inside
 the transaction; malformed or incomplete patches fail instead of reporting success.
 `validate()` now includes semantic checks; use `semantic=False` for the old structural check.
-This release is awaiting review and is not published to PyPI.
+See the [release validation report](docs/engineering-validation.md) for automated checks
+and the remaining Tableau rendering acceptance gap.
 
 ## Why pytableau?
 
