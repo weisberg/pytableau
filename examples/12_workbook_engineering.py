@@ -3,7 +3,7 @@
     python examples/12_workbook_engineering.py --output /tmp/engineering-demo
     python examples/12_workbook_engineering.py --output /tmp/engineering-hyper --hyper
 
-Requires this development checkout; --hyper requires pytableau[hyper].
+Requires pytableau>=3.0.0; --hyper requires pytableau[hyper].
 The output demonstrates XML authoring and recovery, not Tableau rendering acceptance.
 """
 

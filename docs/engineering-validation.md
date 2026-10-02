@@ -1,6 +1,6 @@
-# 3.0 development validation
+# 3.0 release validation
 
-Development snapshot, October 2, 2026. Version 3.0.0 is unreleased.
+Release validation for version 3.0.0, October 2, 2026.
 
 | Check | Result |
 |---|---|
@@ -36,7 +36,7 @@ the independent platform check. CI also checks Python 3.11, 3.12 and 3.13, docum
 distribution builds and the core installed-wheel example.
 
 **Tableau Desktop/Server rendering acceptance is unverified.** No rendering environment
-was available for this run. Before release, validate generated joins, relationships,
+was available for this run. When adopting these APIs, validate generated joins, relationships,
 independent panes, dual axes and table calculations in the target Tableau version and
 save/reopen there. XML/package tests establish serialization and structural/semantic
 checks; they do not prove Tableau renderability or universal downgrade conversion.

@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [3.0.0] — Unreleased
+## [3.0.0] — 2026-10-02
 
 ### Added
 - Complete document and working-asset diffs, serializable snapshot patches, strict stale-input fingerprints, package-layout changes and atomic rollback. Manual structural patch operations accept full XML payloads and preserve their actual scope.
@@ -28,17 +28,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Working asset inventories include additions/deletions and referenced images; deleting an owned plain-workbook asset persists through save/reopen, including nested package layouts. Failed plain saves restore all installed sidecars and XML. XML comments, processing instructions and pending-deletion baselines survive rollback.
 - Cached workbook Hyper handles follow isolated transaction storage. Native extract contracts preserve live federated connections and logical models; dropped physical fields are checked against dependent calculations.
 - Decimal values retain exact precision independently of the caller context; wider numerics upgrade staged files to Hyper format 3. Sub-microsecond timestamps are rejected instead of truncated. The Hyper API minimum is 0.0.19484.
-
 - Source distributions include explicit project artifacts and exclude local agent instructions, review gates and Hyper runtime logs.
 
-### Validation boundaries
-- Automated tests exercise XML/package round trips and real Hyper operations. Tableau Desktop/Server rendering acceptance has not been performed in this environment. XML capability checks are conservative and do not claim universal proprietary-format conversion.
-
----
-
-## [2.0.2] — Unreleased
-
-### Fixed
 - `Workbook.save_as()` preserves the source, stages the workbook file atomically, and rebases extract paths; nested output directories and deterministic new TWBX archives work correctly.
 - Standalone TWB packaging includes adjacent `Data/` assets, and plain TWB copies retain packaged assets. Generated workbooks retain attached extracts; package preparation cleans up failed extraction state and can restart after `close()`.
 - Saves retain the active selection in multi-TWB packages and correctly copy extracts relative to a nested active TWB. Plain output rejects extract layouts it cannot preserve.
@@ -53,9 +44,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - README transaction, extract, fleet, compliance, and migration examples match the public API.
 
 ### Changed
-- Patch version advanced to 2.0.2; Python tooling and CI align with the supported Python 3.11+ minimum.
+- Maintenance fixes developed for the unpublished 2.0.2 cycle are included in this major release.
+- Python tooling and CI align with the supported Python 3.11+ minimum.
 - The `hyper` extra includes pandas, and development no longer requires a sibling `tooli` checkout. The uv lockfile is synchronized with current package metadata.
 - CI includes a separate job exercising real Hyper operations with published dependencies.
+
+### Validation boundaries
+- Automated tests exercise XML/package round trips and real Hyper operations. Tableau Desktop/Server rendering acceptance has not been performed in this environment. XML capability checks are conservative and do not claim universal proprietary-format conversion.
 
 ---
 
