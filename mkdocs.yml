@@ -23,6 +23,7 @@ nav:
   - Quickstart: quickstart.md
   - Maintenance and I/O: maintenance.md
   - Workbook Engineering: engineering.md
+  - Roadmap: roadmap.md
   - API:
       - Overview: api/index.md
       - Governance: api/governance.md

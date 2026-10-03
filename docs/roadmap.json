@@ -1,0 +1,1007 @@
+{
+  "date": "2026-10-03",
+  "baseline": "3.0.0",
+  "milestones": {
+    "hardening": {
+      "title": "v3.0.x \u2014 Validation and release hardening",
+      "order": 0,
+      "goal": "Prove and protect the shipped 3.0 surface before broadening it. Patch releases contain fixes, fixtures and evidence; additive APIs move to 3.1.",
+      "exit": "P0 merge/normalization/archive risks resolved with negative tests; a licensed native fixture corpus and explicit rendering matrix published; supported release artifacts install and pass their declared platform tests.",
+      "github_number": 14
+    },
+    "operations": {
+      "title": "v3.1.0 \u2014 Operational confidence",
+      "order": 1,
+      "goal": "Make server diagnostics, CLI automation, contracts and public API results reliable and complete.",
+      "exit": "Unknown and partial results are explicit; drift matching is identity based; paginated REST/GraphQL data and job outcomes are covered; API/CLI workflows, versioned reports and upgrade docs are exercised.",
+      "github_number": 15
+    },
+    "authoring": {
+      "title": "v3.2.0 \u2014 Native authoring and accessibility",
+      "order": 2,
+      "goal": "Expand authoring only through native fixtures and target-version rendering evidence.",
+      "exit": "Supported dashboards, panes, calculations, formatting and templates survive native save/reopen; accessibility reports distinguish static evidence from required rendered checks.",
+      "github_number": 16
+    },
+    "scale": {
+      "title": "v3.3.0 \u2014 Fleet scale and governed promotion",
+      "order": 3,
+      "goal": "Scale local workflows and deploy workbook changes with reviewable plans, bounded resources and recoverable operations.",
+      "exit": "Benchmarks and resource budgets published; cross-platform interruption recovery demonstrated; promotion previews, permissions, revision checks, job outcomes and rollback limits documented and tested.",
+      "github_number": 17
+    },
+    "research": {
+      "title": "Research backlog \u2014 Evidence and interoperability",
+      "order": 4,
+      "goal": "Run bounded experiments before committing expensive or uncertain capabilities to a release. No delivery date or version commitment.",
+      "exit": "Each spike produces representative inputs, a reproducible result, explicit limits and a go/no-go decision. A production feature requires a separately scoped implementation issue.",
+      "github_number": 18
+    }
+  },
+  "items": [
+    {
+      "id": "R01",
+      "title": "Establish Tableau Desktop/Server rendering acceptance matrix",
+      "milestone": "hardening",
+      "priority": "P0",
+      "size": "L",
+      "baseline": "3.0 XML/package and Hyper tests pass; docs/engineering-validation.md explicitly leaves Desktop/Server rendering acceptance unverified.",
+      "scope": [
+        "Build an opt-in licensed Desktop and test Server/Cloud harness with a manual evidence path where automation is unavailable.",
+        "Cover joins, relationships, independent panes, dual axes, quick calculations, formatting and extract-backed publishing by actual target version."
+      ],
+      "acceptance": [
+        "Record OS, Tableau build, feature, fixture hash and evidence for every tested cell.",
+        "Native open, save/reopen and rendered field/axis behavior pass for each claimed supported feature.",
+        "Untested, unsupported and failed cells remain explicit; publish a reproducible manual checklist and test-artifact policy."
+      ],
+      "deps": [],
+      "labels": [
+        "testing",
+        "xml"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "Do not infer renderability from valid XML or promise universal Tableau-version support.",
+      "issue": 119,
+      "url": "https://github.com/weisberg/pytableau/issues/119",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R02",
+      "title": "Promote native workbook corpus into reproducible CI fixtures",
+      "milestone": "hardening",
+      "priority": "P0",
+      "size": "M",
+      "baseline": "Tracked fixtures are small XML samples; the 11-workbook round-trip corpus used for 3.0 includes locally stored, ignored TWBX files. Its coverage is not reproduced by an ordinary CI checkout.",
+      "scope": [
+        "Select anonymized redistributable native TWB/TWBX samples across supported versions and XML patterns, with license/provenance and expected diagnostics.",
+        "Include unknown XML/comments/PIs, named connections, multiple sources, nested assets and complex authoring."
+      ],
+      "acceptance": [
+        "A clean checkout fetches or contains every declared fixture with pinned hashes and documented redistribution rights.",
+        "CI runs XML/asset round trips, patch convergence and expected semantic diagnostics for the corpus.",
+        "Known source defects are fixture expectations rather than suppressed checks; report coverage by version and feature."
+      ],
+      "deps": [],
+      "labels": [
+        "testing",
+        "xml"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 120,
+      "url": "https://github.com/weisberg/pytableau/issues/120",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R03",
+      "title": "Expand supported platform, extras and release artifact checks",
+      "milestone": "hardening",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "CI exercises Python 3.11-3.13 on Linux, real Hyper and an installed core wheel. Local Apple Silicon Hyper testing needed a documented pantab executable substitution.",
+      "scope": [
+        "Test supported optional extras and core wheels/sdists across a declared Linux/macOS/Windows matrix; verify published dependency compatibility.",
+        "Evaluate newer Python versions as experimental until evidence supports adding them; validate metadata, packaged templates and reproducible provenance."
+      ],
+      "acceptance": [
+        "Every supported environment installs official dependency binaries and runs representative workflows without hidden patches.",
+        "Unsupported architecture/runtime combinations fail with actionable guidance and are documented.",
+        "Build/Twine checks, source exclusions, installed-wheel imports and trusted-publish artifact checks are release gates."
+      ],
+      "deps": [
+        "R02"
+      ],
+      "labels": [
+        "ci-cd",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "Do not claim all platform combinations or a newer Python runtime are supported before their tests pass.",
+      "issue": 121,
+      "url": "https://github.com/weisberg/pytableau/issues/121",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R04",
+      "title": "Bound and validate archive/XML resource consumption",
+      "milestone": "hardening",
+      "priority": "P0",
+      "size": "L",
+      "baseline": "Entity/network protections exist. PackageManager currently delegates archive extraction to zipfile.extractall without a project-level member/count/size policy.",
+      "scope": [
+        "Audit member normalization, duplicate/case-colliding paths, symlinks, nesting and expanded-size limits; define safe limits and cleanup behavior.",
+        "Define plain-TWB/XML byte, depth and node budgets, enforced incrementally or before excessive allocation across default and strict modes; huge_tree parsing and post-parse checks are not resource limits.",
+        "Add adversarial XML/ZIP corpus cases and connector-aware secret redaction in diagnostics without leaking credentials."
+      ],
+      "acceptance": [
+        "Reject or explicitly handle ambiguous/path-colliding archive members before installing files.",
+        "Tests cover malformed XML/ZIP, valid but oversized/deep XML, node budgets, traversal, oversized expansion, many members, failure cleanup and destination preservation; assert bounded memory/termination behavior.",
+        "Document threat model, resource limits and any compatibility overrides; preserve safe unknown XML."
+      ],
+      "deps": [],
+      "labels": [
+        "security",
+        "testing",
+        "xml"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No claim of a reproduced exploitable traversal bug solely from use of zipfile; findings require concrete tests. New configuration APIs belong in a minor release.",
+      "issue": 122,
+      "url": "https://github.com/weisberg/pytableau/issues/122",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R05",
+      "title": "Make workbook merge reconcile identities, references and assets",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "Workbook.merge() exists, but its collection-copy implementation suffixes conflicting names without a complete identity/reference/asset rewrite plan. Legacy issue #51 is closed.",
+      "scope": [
+        "Define dry-run collision reports and deterministic identity maps for datasources, fields, sheets, dashboards, actions and packaged assets.",
+        "Either reconcile an explicitly supported collision or fail before mutation; make mutation transactional and respect the supplied conflict policy."
+      ],
+      "acceptance": [
+        "Duplicate IDs/names, repeated collisions and overlapping asset paths produce deterministic outcomes with no dangling references.",
+        "Merged dependencies and owned extract/image assets survive save/reopen; rollback restores both input states on failure.",
+        "Native acceptance covers supported merged layouts and limitations are explicit."
+      ],
+      "deps": [
+        "R01",
+        "R02",
+        "R29"
+      ],
+      "labels": [
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "Do not silently reinterpret ambiguous shared datasources. A new merge API is scheduled in a minor release; patch releases may reject unsafe existing cases.",
+      "issue": 123,
+      "url": "https://github.com/weisberg/pytableau/issues/123",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R06",
+      "title": "Harden server transport, pagination, authentication and job outcomes",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "ServerClient provides PAT/credentials, publish/download, refresh and TSC upload delegation. list_workbooks() reads one page; transport/job policy is limited.",
+      "scope": [
+        "Use TSC pagination and version-aware adapters; expose job wait/status, timeout/cancellation and structured transport errors.",
+        "Design supported Connected Apps authentication, session lifecycle, site scoping and redacted diagnostics; bound retries and prevent blind publish retries."
+      ],
+      "acceptance": [
+        "Tests cover multi-page inventory, expired auth, permission errors, rate limits, timeout and async failure/cancellation.",
+        "An uncertain publish result cannot automatically create duplicate content; outcomes include job and server identity.",
+        "Opt-in live contract tests cover the declared REST/TSC versions and supported authentication modes."
+      ],
+      "deps": [
+        "R03"
+      ],
+      "labels": [
+        "testing",
+        "security"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 124,
+      "url": "https://github.com/weisberg/pytableau/issues/124",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R07",
+      "title": "Make Metadata API queries paginated, schema-aware and completeness-aware",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "MetadataClient exposes raw queries and small templates; it does not aggregate connection pagination or interpret GraphQL errors/partial results.",
+      "scope": [
+        "Validate query templates against declared Tableau schemas and stable LUID identities; paginate supported connection types.",
+        "Preserve errors, permission filtering, disabled metadata, throttling and incomplete-result evidence in typed outcomes."
+      ],
+      "acceptance": [
+        "Mock fixtures cover data plus errors, permission-filtered results, page cursors and schema differences.",
+        "Every outcome records principal, site, permissions mode and declared visibility scope; empty within visible scope is distinguished from unavailable/incomplete evidence. Site-wide completeness requires independent evidence and otherwise stays unknown.",
+        "Optional live queries pass against supported deployments; tokens are redacted and bounded query/retry controls are documented."
+      ],
+      "deps": [
+        "R06"
+      ],
+      "labels": [
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "A successful HTTP response does not establish complete GraphQL data. See official Metadata API common-errors documentation.",
+      "issue": 125,
+      "url": "https://github.com/weisberg/pytableau/issues/125",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R08",
+      "title": "Complete local/published drift reports with explicit unknown states",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "ServerClient.detect_drift() currently compares server addresses and returns [] on lookup failure. It does not fulfill the broader original #102 scope.",
+      "scope": [
+        "Reconcile stable workbook/datasource/connection identities and compare published XML/metadata, connection attributes, schema and version evidence.",
+        "Report extract freshness from accessible job/refresh evidence with observation time, configured freshness threshold and completeness state; keep reads side-effect free."
+      ],
+      "acceptance": [
+        "Typed reports distinguish clean within evidenced visibility scope, drifted, partial and unavailable results; failures or permission-filtered emptiness never masquerade as site-wide no drift.",
+        "Tests cover duplicate captions/hosts, missing sources, partial permissions, stale refresh evidence and schema/version differences.",
+        "JSON/text/CLI reports identify evidence source and timestamp; sensitive values are redacted and no mutation occurs."
+      ],
+      "deps": [
+        "R02",
+        "R06",
+        "R07",
+        "R09"
+      ],
+      "labels": [
+        "cli",
+        "testing"
+      ],
+      "existing": 102,
+      "risk": "high",
+      "exclude": "Do not equate a failed refresh with a proven data-age violation or compare every local connection against every server connection.",
+      "issue": 102,
+      "url": "https://github.com/weisberg/pytableau/issues/102",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R09",
+      "title": "Expose 3.0 workflows through CLI and versioned JSON schemas",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "The API contains snapshot patches, scoped impact, compatibility, durable manifests and extract contracts; CLI/report coverage is not a single stable contract.",
+      "scope": [
+        "Define CLI parity for patch create/apply, impact, compatibility, manifest prepare/apply/resume/rollback and extract contract validation.",
+        "Version patch/manifest/report schemas and specify exit codes, dry runs, output paths and backward-compatible readers."
+      ],
+      "acceptance": [
+        "Core workflows run from an installed package without optional integrations; integration commands identify required extras.",
+        "Machine-readable output validates against published schemas and never mixes logs into JSON stdout.",
+        "Negative CLI tests cover stale inputs, missing extras, invalid manifests, ambiguous identities and configuration errors."
+      ],
+      "deps": [
+        "R02"
+      ],
+      "labels": [
+        "cli",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 126,
+      "url": "https://github.com/weisberg/pytableau/issues/126",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R10",
+      "title": "Add reviewable extract schema-change plans and provenance",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "ExtractContract already validates table identity, types/nullability/keys and strict/additive/replace writes with explicit backfills.",
+      "scope": [
+        "Provide serializable dry-run plans for schema changes and compatible XML metadata updates, with input hashes and chosen backfill policies.",
+        "Record table/schema identity, source/destination hashes, row counts, write policy and caller-supplied provenance without exposing source data."
+      ],
+      "acceptance": [
+        "A prepared plan validates before mutation and rejects changed inputs or unsupported loss of information.",
+        "Add/drop/backfill/replace and unrelated-table preservation are covered with exact decimal/time/null/key cases.",
+        "Contract errors and provenance reports use the stable JSON/CLI surface; documented examples show inspect-plan-apply-verify."
+      ],
+      "deps": [
+        "R09"
+      ],
+      "labels": [
+        "core",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "Do not weaken the exact type checks or imply arbitrary database migrations are supported.",
+      "issue": 127,
+      "url": "https://github.com/weisberg/pytableau/issues/127",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R11",
+      "title": "Unify governance findings and CI report formats",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "GovernanceRuleset, compliance/contract runners and JUnit output exist. A complete shared schema, source locations and all historical SARIF/annotation promises are not established by closed #107.",
+      "scope": [
+        "Define shared findings with stable rule IDs, datasource-qualified identity, XML location, severity and evidence.",
+        "Support versioned JSON, validated JUnit/SARIF and safe GitHub annotations, with configurable baselines and severity policy."
+      ],
+      "acceptance": [
+        "Format fixtures validate against their declared schemas; tests cover escaping, multi-file locations and stable ordering.",
+        "Exit codes distinguish findings, configuration failure and unavailable checks; baseline entries expire visibly.",
+        "One issue retains the same identity and severity across library, fleet and CLI reports."
+      ],
+      "deps": [
+        "R09"
+      ],
+      "labels": [
+        "ci-cd",
+        "cli",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 128,
+      "url": "https://github.com/weisberg/pytableau/issues/128",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R12",
+      "title": "Make agent discovery and mutation plans consistently typed and bounded",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "describe(), capabilities(), OperationReceipt and transaction helpers exist; newer workflows expose separate report/plan shapes.",
+      "scope": [
+        "Expose content-based, version-aware capabilities with installed-extra and supported-operation evidence.",
+        "Add inspectable mutation plans/receipts that compose patches, contracts and migration reports; limit payload size and redact secrets."
+      ],
+      "acceptance": [
+        "Typed schemas distinguish proposed, applied, rejected, unavailable and partially supported operations.",
+        "Read-only discovery never mutates XML/assets and bounded summaries identify omitted content.",
+        "Examples and negative tests demonstrate stale plans, ambiguous fields and unavailable integrations with actionable receipts."
+      ],
+      "deps": [
+        "R09",
+        "R10",
+        "R11"
+      ],
+      "labels": [
+        "core",
+        "documentation",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No autonomous approval bypass, hosted agent service or mandatory external AI dependency.",
+      "issue": 129,
+      "url": "https://github.com/weisberg/pytableau/issues/129",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R13",
+      "title": "Complete native dashboard layout, device-layout and action authoring",
+      "milestone": "authoring",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "Dashboard zone/action reads and basic moves/add/remove methods exist. Native responsive layout generation and broad action semantics remain limited despite closed #114.",
+      "scope": [
+        "Support nested containers, explicit desktop/phone/tablet layouts and source/target/trigger/field mapping for supported actions.",
+        "Preserve stable IDs, style/device inheritance and unknown XML; reject unsupported structures rather than flattening them."
+      ],
+      "acceptance": [
+        "Fixtures cover nested layout moves, action remapping, device layout edits and field dependencies with save/reopen.",
+        "Desktop/Server evidence proves supported action triggers, sizing and device selection.",
+        "Builder/spec parity, rollback and limitations are documented with runnable examples."
+      ],
+      "deps": [
+        "R01",
+        "R02"
+      ],
+      "labels": [
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 130,
+      "url": "https://github.com/weisberg/pytableau/issues/130",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R14",
+      "title": "Expand worksheet authoring with explicit multi-source and table-calc semantics",
+      "milestone": "authoring",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "3.0 authors native panes/dual axes and quick table calculations for one datasource per worksheet; inspection can resolve multi-source references.",
+      "scope": [
+        "Design explicit primary/secondary source relationships, axis bindings and aggregation constraints without relying on captions.",
+        "Expand addressed/partitioned/window calculations and pane-specific sorting/filtering only from native fixture evidence."
+      ],
+      "acceptance": [
+        "Valid multi-source and invalid ambiguous cases are represented by fixtures and deterministic validation errors.",
+        "Rendered output and native save/reopen agree for each supported pane/axis/calculation combination.",
+        "The existing one-source builder remains compatible; unsupported blends are clearly reported."
+      ],
+      "deps": [
+        "R01",
+        "R02",
+        "R17"
+      ],
+      "labels": [
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 131,
+      "url": "https://github.com/weisberg/pytableau/issues/131",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R15",
+      "title": "Publish a rendering-verified template gallery and recipes",
+      "milestone": "authoring",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "The package ships ten TWB templates and TemplateEngine mappings. File presence and XML tests alone do not establish visual acceptance.",
+      "scope": [
+        "Create a versioned template manifest with field/role/type contracts, feature requirements and native rendering evidence.",
+        "Include relationships, extracts, pane/axis examples and dashboard layouts with screenshots or equivalent acceptance records."
+      ],
+      "acceptance": [
+        "Every advertised template passes installed-wheel creation, complete mapping, semantic validation and native save/reopen.",
+        "Incomplete/incompatible mappings fail before output installation; native field identities survive remapping.",
+        "Publish clear core/Hyper/Server recipes and regenerate evidence when templates or supported versions change."
+      ],
+      "deps": [
+        "R01",
+        "R13"
+      ],
+      "labels": [
+        "documentation",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 132,
+      "url": "https://github.com/weisberg/pytableau/issues/132",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R16",
+      "title": "Implement evidence-based accessibility diagnostics and rendered checks",
+      "milestone": "authoring",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "Issue #111 remains open; there is no accessibility module in the 3.0 source tree. Its old draft mixed WCAG criteria with Tableau-specific heuristics.",
+      "scope": [
+        "Implement checkable XML diagnostics for text/background contrast where known, image/viz alternatives, labels and color-only encoding risks.",
+        "Separate static findings from manual or rendered keyboard/focus/screen-reader checks; use Tableau version-specific guidance and exact WCAG mappings."
+      ],
+      "acceptance": [
+        "Reports distinguish pass, fail, unknown and manual-review-required with evidence, criterion and remediation.",
+        "Contrast tests use the WCAG luminance calculation and appropriate thresholds for the actual text case.",
+        "Mark-count advice is a Tableau rendering heuristic, not a WCAG success criterion; XML-only results never certify WCAG AA compliance.",
+        "A rendered acceptance checklist and API/CLI reports cover representative accessible and inaccessible examples."
+      ],
+      "deps": [
+        "R01",
+        "R13"
+      ],
+      "labels": [
+        "cli",
+        "testing"
+      ],
+      "existing": 111,
+      "risk": "medium",
+      "exclude": "Do not claim XML establishes keyboard/screen-reader behavior or full WCAG conformance. Formal audits require the rendered published experience.",
+      "issue": 111,
+      "url": "https://github.com/weisberg/pytableau/issues/111",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R17",
+      "title": "Extend formula grammar, versioned functions and scoped AST analysis",
+      "milestone": "authoring",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "A Lark parser, AST, function registry and linter exist. The complete language and per-version signatures are not proven by those modules alone.",
+      "scope": [
+        "Build a native-formula corpus including LODs, escaped identifiers, table/window calculations, comments and external SCRIPT/RAWSQL calls.",
+        "Resolve AST references through the scoped graph; record unsupported syntax/functions and versioned signatures rather than guessing return types."
+      ],
+      "acceptance": [
+        "Corpus reports show parse coverage and expected unsupported cases; no parse failure becomes a clean analysis result.",
+        "Regression tests cover source-qualified collisions, nested scopes and string/comment preservation.",
+        "Lint diagnostics distinguish syntax, semantic uncertainty, deprecation and performance heuristics with source locations."
+      ],
+      "deps": [
+        "R02"
+      ],
+      "labels": [
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 133,
+      "url": "https://github.com/weisberg/pytableau/issues/133",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R18",
+      "title": "Verify native formatting, palette inheritance and conditional encoding",
+      "milestone": "authoring",
+      "priority": "P2",
+      "size": "M",
+      "baseline": "Theme, palettes and FormatSpec read/write exist. Conditional encoding and inherited defaults need native interpretation rather than generic XML injection.",
+      "scope": [
+        "Define supported worksheet/dashboard/field formatting inheritance and connector/version-specific capabilities.",
+        "Add validated conditional encodings, palette bindings, font/number/date formats and label styles where native fixtures support them."
+      ],
+      "acceptance": [
+        "Formatting read/apply round trips preserve unrelated styles and unknown format nodes.",
+        "Native rendering validates each supported palette/inheritance/conditional encoding case.",
+        "Specs, builders and theme application produce equivalent supported output and unsupported requests fail explicitly."
+      ],
+      "deps": [
+        "R01",
+        "R02"
+      ],
+      "labels": [
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 134,
+      "url": "https://github.com/weisberg/pytableau/issues/134",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R19",
+      "title": "Strengthen migration durability and cross-platform interruption guarantees",
+      "milestone": "scale",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "MigrationManifest already has exact prepared outputs, hashes/backups, process recovery, file fsync and advisory POSIX/Windows locks. Fleet installation remains per-file.",
+      "scope": [
+        "Fault-inject file replacement, journal updates, backup reads and multi-process contention on supported filesystems/platforms.",
+        "Define directory-sync, permissions/metadata retention and storage budget policies; provide explicit limits for network filesystems and power loss."
+      ],
+      "acceptance": [
+        "Cross-platform tests prove resume/rollback after each declared interruption point and reject external changes.",
+        "Backups and manifests survive the tested durability model; lock acquisition/cleanup is deterministic.",
+        "Document guarantees separately for process interruption, power loss and whole-fleet atomicity; do not overstate the latter two."
+      ],
+      "deps": [
+        "R03"
+      ],
+      "labels": [
+        "core",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 135,
+      "url": "https://github.com/weisberg/pytableau/issues/135",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R20",
+      "title": "Benchmark and scale fleet workflows with bounded concurrency",
+      "milestone": "scale",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "FleetScanner and migration/compliance operations exist, but the release does not publish large-corpus throughput or memory budgets.",
+      "scope": [
+        "Benchmark parse, diff/patch, validation, extract and fleet tasks by workbook/XML/asset size with reproducible environments.",
+        "Design bounded worker pools, cancellation, incremental results and safe cache invalidation without shared writable workbook handles."
+      ],
+      "acceptance": [
+        "Publish baselines and explicit target budgets before optimizing; fail meaningful regressions in dedicated performance checks.",
+        "Serial/parallel reports and mutation outputs agree; tests cover cancellation, corruption and worker failure.",
+        "Peak memory, temporary disk use, file handles and Hyper process counts remain within documented configured limits."
+      ],
+      "deps": [
+        "R02",
+        "R19"
+      ],
+      "labels": [
+        "performance",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "Do not promise gigabyte DOM parsing or infer speed gains from synthetic tiny fixtures alone.",
+      "issue": 136,
+      "url": "https://github.com/weisberg/pytableau/issues/136",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R21",
+      "title": "Add incremental scoped indexing and cross-workbook lineage",
+      "milestone": "scale",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "WorkbookIndex is a SQLite field/connection catalog keyed by local paths; the scoped 3.0 graph is not a complete cross-workbook identity store.",
+      "scope": [
+        "Persist hashes and source-qualified fields, references, diagnostics and local/server provenance with schema migrations.",
+        "Update changed/deleted/moved workbooks incrementally and join published lineage only when stable IDs/evidence exist."
+      ],
+      "acceptance": [
+        "Incremental and clean rebuild results agree after edits, deletes and renames, with no stale dependency edges.",
+        "Duplicate captions and local/published copies retain distinct identities; optional metadata joins expose uncertainty.",
+        "Queries cover fields, custom SQL, connections and transitive affected workbooks; index version upgrades and concurrent reads are tested."
+      ],
+      "deps": [
+        "R02",
+        "R07"
+      ],
+      "labels": [
+        "core",
+        "performance",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 137,
+      "url": "https://github.com/weisberg/pytableau/issues/137",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R22",
+      "title": "Add governed publish/promotion plans with revision checks and recovery",
+      "milestone": "scale",
+      "priority": "P1",
+      "size": "L",
+      "baseline": "Publish/download/refresh workflows exist; they do not constitute a complete reviewed, revision-safe promotion transaction.",
+      "scope": [
+        "Prepare a dry-run deployment plan with source/output hashes, semantic/governance checks, permission prerequisites and intended server/site/project IDs.",
+        "Use conditional revision guards only where upstream supports them; otherwise disclose the preflight/publish race and required coordination. Persist job outcomes and define safe compensating rollback."
+      ],
+      "acceptance": [
+        "Changed inputs or observed remote revision changes abort preflight. Tests distinguish upstream conditional publishing from best-effort check/write behavior and document any race window.",
+        "Tests cover async failure, unknown publish outcome, permissions, retry duplication, rollback conflicts and multi-workbook partial success.",
+        "Examples document explicit approval boundaries and downloadable recovery artifacts; no operation claims global server atomicity."
+      ],
+      "deps": [
+        "R06",
+        "R08",
+        "R11",
+        "R19"
+      ],
+      "labels": [
+        "ci-cd",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 138,
+      "url": "https://github.com/weisberg/pytableau/issues/138",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R23",
+      "title": "Add bounded-memory multi-table extract evolution and refresh",
+      "milestone": "scale",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "Real Hyper query/upsert/rolling refresh and contract validation exist. DataFrame-based paths and contract writes are not a general streaming multi-table transaction planner.",
+      "scope": [
+        "Design batch/Arrow or iterable ingestion with exact contract validation and bounded-memory key checking.",
+        "Plan multi-table schema evolution, refresh windows and provenance while preserving unrelated tables and workbook XML contracts."
+      ],
+      "acceptance": [
+        "Benchmark memory and throughput on realistic extracts; published limits include duplicate/null composite keys and exact numeric/time semantics.",
+        "Failure injection leaves original extracts/XML intact across supported multi-table writes.",
+        "Streaming and in-memory results agree; unsupported type coercions and raw external extract handles remain explicit."
+      ],
+      "deps": [
+        "R10",
+        "R19",
+        "R20"
+      ],
+      "labels": [
+        "performance",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 139,
+      "url": "https://github.com/weisberg/pytableau/issues/139",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R24",
+      "title": "Validate performance telemetry adapters and evidence-based correlation",
+      "milestone": "research",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "Complexity scoring exists; #104 remains open and has no implemented performance_correlation API. Its old draft conflated Cloud Admin Insights with Server repository telemetry.",
+      "scope": [
+        "Start with anonymized, user-supplied telemetry exports and stable workbook/sheet/query identity plus timestamp/timezone normalization.",
+        "Evaluate distinct optional Cloud Admin Insights and Server repository/performance-recording adapters against documented permissions and schema availability."
+      ],
+      "acceptance": [
+        "Publish a reproducible spike on representative telemetry, including unmatched rows, missing data, confidence and sample-window limits.",
+        "Report correlations and candidate bottlenecks without asserting calculated-field causation from workbook complexity alone.",
+        "Document platform-specific access/freshness limits and a go/no-go decision for production adapters; no invented REST endpoint."
+      ],
+      "deps": [
+        "R07",
+        "R08",
+        "R20"
+      ],
+      "labels": [
+        "performance"
+      ],
+      "existing": 104,
+      "risk": "medium",
+      "exclude": "Admin Insights is a Tableau Cloud feature. Do not require three recommendations regardless of available evidence or promise a causal optimizer.",
+      "issue": 104,
+      "url": "https://github.com/weisberg/pytableau/issues/104",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R25",
+      "title": "Research evidence-backed XML transforms and compatibility profiles",
+      "milestone": "research",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "3.0 has a conservative capability registry and guarded header migrations; it does not implement arbitrary XML downgrade conversion.",
+      "scope": [
+        "Select one bounded feature/version transition with paired native before/after fixtures and documented information-loss rules.",
+        "Prototype a transform registry with dry-run compatibility evidence, custom rules and rollback."
+      ],
+      "acceptance": [
+        "Publish paired native save/reopen evidence and semantic diffs for the chosen transition.",
+        "Unknown XML/features stay unverified; unsupported or lossy conversion requires explicit decisions and does not silently succeed.",
+        "Produce a go/no-go and separately scoped implementation proposal; breaking semantics require a new major version."
+      ],
+      "deps": [
+        "R01",
+        "R02",
+        "R17"
+      ],
+      "labels": [
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 140,
+      "url": "https://github.com/weisberg/pytableau/issues/140",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R26",
+      "title": "Research Git-friendly normalization and three-way patch conflict handling",
+      "milestone": "research",
+      "priority": "P2",
+      "size": "L",
+      "baseline": "Snapshot patches preserve complete target XML/assets with strict fingerprints. Existing git_clean has a separate P0 style-preservation correction in R30. Neither operation provides general three-way merge or compact-delta patches.",
+      "scope": [
+        "Prototype opt-in source-control views and base/local/remote conflict reports using stable identities and native ordering evidence.",
+        "Measure compact asset delta/storage approaches with licensing, payload and secret-redaction constraints."
+      ],
+      "acceptance": [
+        "Round-trip fixtures prove any normalization preserves meaning and order-sensitive XML; original source remains recoverable.",
+        "Conflicts include unknown XML and assets and cannot be silently auto-resolved.",
+        "Compare reviewability/storage against snapshots and issue a go/no-go before defining a new patch format."
+      ],
+      "deps": [
+        "R02",
+        "R05",
+        "R09",
+        "R30"
+      ],
+      "labels": [
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No automatic alphabetical XML sorting, thumbnail stripping or semantic ID rewriting without evidence and an explicit opt-in.",
+      "issue": 141,
+      "url": "https://github.com/weisberg/pytableau/issues/141",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R27",
+      "title": "Evaluate optional event-driven and ecosystem workflow adapters",
+      "milestone": "research",
+      "priority": "P3",
+      "size": "M",
+      "baseline": "Core local workflows and thin TSC integration exist. The project has no committed general event automation or external platform adapter contract.",
+      "scope": [
+        "Identify concrete consumer requests for webhook/event, Migration SDK, orchestration or agent-tool adapters.",
+        "Prototype a single optional adapter using explicit approved operations, replay IDs and the publish/migration plan contracts."
+      ],
+      "acceptance": [
+        "Design records name the consumer, supported upstream API/license and stable local interface.",
+        "Replay, authorization, malformed payload and unavailable integration cases are tested without side-effectful discovery.",
+        "Keep core dependent only on lxml; choose go/no-go and a separately scoped implementation issue."
+      ],
+      "deps": [
+        "R06",
+        "R12",
+        "R22"
+      ],
+      "labels": [
+        "documentation"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No hosted service, full REST API clone, mandatory orchestrator/AI dependency or unrequested external communication.",
+      "issue": 142,
+      "url": "https://github.com/weisberg/pytableau/issues/142",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R28",
+      "title": "Publish typed API contracts, support policy and upgrade documentation",
+      "milestone": "operations",
+      "priority": "P1",
+      "size": "M",
+      "baseline": "Configured mypy checks pass, but pyproject has module-level ignore_errors overrides and several dynamic integration/report types. That is not universal strict typing.",
+      "scope": [
+        "Inventory public APIs, remove type-check exemptions incrementally and publish stable errors/report schemas and deprecation policy.",
+        "Improve API reference and cookbook coverage for 2.x-to-3.x transitions, optional dependencies and exact save/transaction/version semantics."
+      ],
+      "acceptance": [
+        "Typed consumer examples and contract tests cover each declared stable API without suppressing their own errors.",
+        "A support table names Python, dependency floors, OS/architecture and Tableau capability evidence with unverified cases.",
+        "Docs link runnable examples, backward-compatible changes and major-version triggers; exported symbols and annotations are checked in CI."
+      ],
+      "deps": [
+        "R03",
+        "R09"
+      ],
+      "labels": [
+        "documentation",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "medium",
+      "exclude": "No unrelated library rewrite or expansion into a general Tableau administration platform.",
+      "issue": 143,
+      "url": "https://github.com/weisberg/pytableau/issues/143",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R29",
+      "title": "Reject unsafe existing merge cases before mutation and honor conflicts",
+      "milestone": "hardening",
+      "priority": "P0",
+      "size": "M",
+      "baseline": "Workbook.merge() copies XML collections with simple name suffixes. It does not reconcile imported references/assets and does not forward its public conflict_suffix to the collection helper.",
+      "scope": [
+        "Audit the existing merge entry point and reject collision/asset/unsupported cases it cannot safely preserve.",
+        "Honor the current conflict parameter, avoid duplicate generated names and preserve destination state on every rejection."
+      ],
+      "acceptance": [
+        "Negative tests cover same datasource/sheet IDs, repeated suffix collisions, dependent references and owned assets.",
+        "Safe supported existing merges retain valid dependencies and save/reopen; unsafe inputs fail before changing XML/assets.",
+        "Document the intentionally limited patch-safe contract and link the full reconciliation API follow-up R05."
+      ],
+      "deps": [],
+      "labels": [
+        "bug",
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "No new dry-run or reconciliation API in a patch release; broader native merging is R05 in 3.1.",
+      "issue": 144,
+      "url": "https://github.com/weisberg/pytableau/issues/144",
+      "status": "planned",
+      "owner": null
+    },
+    {
+      "id": "R30",
+      "title": "Fix destructive git_clean style removal and preserve semantic content",
+      "milestone": "hardening",
+      "priority": "P0",
+      "size": "M",
+      "baseline": "The shipped xml.canonical.git_clean removes every //style block; native FormatSpec stores font/color formats there. Workbook and CLI cleaning overwrite their source. A scratch reproduction confirms the loss.",
+      "scope": [
+        "Preserve native style rules and unknown semantic XML; remove only evidenced volatile metadata while retaining full document comments/PIs and order.",
+        "Make writes transactional and ensure dry-run/non-in-place operation cannot change source files."
+      ],
+      "acceptance": [
+        "Regression fixtures retain font, number, color and inherited style rules after cleaning and save/reopen.",
+        "Tests cover unknown XML, pre/post-root comments/PIs, entity safety, malformed input and write failure without source loss.",
+        "The existing API and CLI clearly document normalization behavior; new optional normalization policies require a minor release."
+      ],
+      "deps": [
+        "R02"
+      ],
+      "labels": [
+        "bug",
+        "core",
+        "xml",
+        "testing"
+      ],
+      "existing": null,
+      "risk": "high",
+      "exclude": "Do not treat all styles as volatile. New compact/three-way patch design remains separate research in R26.",
+      "issue": 145,
+      "url": "https://github.com/weisberg/pytableau/issues/145",
+      "status": "planned",
+      "owner": null
+    }
+  ],
+  "overview_issue": 146
+}

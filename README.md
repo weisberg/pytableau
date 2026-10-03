@@ -25,6 +25,13 @@ the transaction; malformed or incomplete patches fail instead of reporting succe
 See the [release validation report](docs/engineering-validation.md) for automated checks
 and the remaining Tableau rendering acceptance gap.
 
+## Roadmap
+
+See the [comprehensive roadmap](docs/roadmap.md) for the released 3.0 baseline,
+prioritized work, acceptance criteria, dependencies and linked GitHub milestones/issues.
+Track progress in [roadmap overview #146](https://github.com/weisberg/pytableau/issues/146).
+Release targets are proposed sequencing, not delivery-date commitments.
+
 ## Why pytableau?
 
 The Tableau Python ecosystem is fragmented. Tableau/Salesforce maintains several narrow libraries, each covering a single concern:

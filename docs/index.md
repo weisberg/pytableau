@@ -10,3 +10,6 @@ Use it for read, mutate, and publish workflows.
 - Generate `.twb` diffs and analyze schema patterns.
 
 Visit the sections below to get started.
+
+See the [project roadmap](roadmap.md) for shipped capabilities, remaining gaps and
+prioritized release milestones with GitHub tracking.
